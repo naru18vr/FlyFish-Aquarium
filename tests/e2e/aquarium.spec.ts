@@ -90,8 +90,9 @@ test('keyboard selection, stimulation, feeding and inspection are accessible', a
   await canvas.press('ArrowRight');
   expect(await page.evaluate(() => window.__aquarium.sim.selected)).not.toBe(selected);
   await page.locator('#inspector-close').click(); await expect(canvas).toBeFocused();
+  const foodBefore = await page.evaluate(() => window.__aquarium.sim.food.length);
   await canvas.press('Space');
-  expect(await page.evaluate(() => window.__aquarium.sim.food.length)).toBe(5);
+  expect(await page.evaluate(() => window.__aquarium.sim.food.length)).toBe(foodBefore + 5);
   await page.locator('#inspect-mode').click(); await expect(page.locator('#inspect-mode')).toHaveAttribute('aria-pressed', 'true');
   await canvas.focus(); await canvas.press('Escape'); await expect(page.locator('#inspect-mode')).toHaveAttribute('aria-pressed', 'false');
 });
