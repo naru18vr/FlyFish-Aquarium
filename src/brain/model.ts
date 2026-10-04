@@ -55,7 +55,7 @@ export class BrainModel {
       for (let i = 0; i < this.neurons; i++) {
         state.current[i] = 0;
         const group = this.data.neurons[i].adapterGroup;
-        if (state.refractory[i]) { state.refractory[i]--; continue; }
+        if (state.refractory[i]) { state.refractory[i]--; state.rates[i] *= .94; continue; }
         const current = clamp(drive[group] + syn[i] + (state.rng() - .5) * noise, 0, 8);
         state.voltage[i] += .22 * (-state.voltage[i] + current);
         if (state.voltage[i] >= 1) {
