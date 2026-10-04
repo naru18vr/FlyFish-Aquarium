@@ -36,6 +36,8 @@ export class AquariumRenderer {
   private initialized = false;
   async init(host: HTMLElement) {
     await this.app.init({ width: WIDTH, height: HEIGHT, antialias: false, background: '#143f46', resolution: 1, preference: 'webgl' });
+    // A user can enter aquarium mode while the GPU is still initializing.
+    if (this.app.renderer.width !== WIDTH || this.app.renderer.height !== HEIGHT) this.app.renderer.resize(WIDTH, HEIGHT);
     host.prepend(this.app.canvas);
     this.app.canvas.setAttribute('aria-label', '泳ぐ魚の水槽。空間をクリックで餌、魚をクリックで刺激。Shift＋クリックで個体情報。');
     this.app.canvas.setAttribute('role', 'img');
@@ -51,8 +53,6 @@ export class AquariumRenderer {
     // Simulation owns the animation clock, so there is only one RAF loop.
     this.app.stop();
     this.initialized = true;
-    // A user can enter aquarium mode while the GPU is still initializing.
-    if (this.app.renderer.width !== WIDTH || this.app.renderer.height !== HEIGHT) this.resize();
   }
   resize() {
     if (!this.initialized) return;
