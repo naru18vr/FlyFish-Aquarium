@@ -3,7 +3,7 @@ import data from '../../public/data/connectome.json';
 import { BrainModel } from '../../src/brain/model';
 import { isConnectome } from '../../src/brain/connectome';
 import { Aquarium, MAX_FOOD } from '../../src/simulation';
-import { BOUNDS, distance, safePosition, SpatialGrid } from '../../src/math';
+import { BASE_HEIGHT, BASE_WIDTH, BOUNDS, distance, HEIGHT, safePosition, SpatialGrid, tankSize, WIDTH } from '../../src/math';
 import { DEFAULTS, emptySense, type Connectome, type Quality } from '../../src/types';
 import { FISH_SPECIES, PREDATOR_KINDS } from '../../src/species';
 
@@ -49,6 +49,45 @@ describe('measured neural circuit', () => {
   });
 });
 describe('aquarium interactions and safety', () => {
+  it('fills portrait, landscape and large viewports without stretching sprites', () => {
+    for (const [width, height] of [[320, 640], [412, 915], [844, 390], [1440, 1080], [3840, 2160]]) {
+      const world = tankSize(width, height);
+      expect(world.width).toBeGreaterThanOrEqual(640); expect(world.height).toBeGreaterThanOrEqual(360);
+      expect(Math.abs(world.width / world.height - width / height)).toBeLessThan(.002);
+    }
+    expect(tankSize(0, NaN)).toEqual({ width: BASE_WIDTH, height: BASE_HEIGHT });
+  });
+  it('preserves fish identities and brain state while resizing, rotating and resetting the aquarium', () => {
+    const sim = new Aquarium({ ...DEFAULTS, fishCount: 40, predators: 8, stations: 6 });
+    const fish = sim.fish[0], ids = sim.fish.map(f => f.id);
+    fish.hunger = .73; fish.activity[0] = .8; fish.spikes = 7; sim.selected = fish.id;
+    sim.feed(500);
+    try {
+      for (const [width, height] of [[640, 1385], [844, 390], [1440, 1080], [640, 360], [1200, 720]]) {
+        sim.resize(width, height);
+        expect(sim.fish.map(f => f.id)).toEqual(ids); expect(sim.fish[0]).toBe(fish);
+        expect(fish.hunger).toBe(.73); expect(fish.activity[0]).toBe(.8); expect(fish.spikes).toBe(7); expect(sim.selected).toBe(fish.id);
+        for (const object of [...sim.fish, ...sim.predators, ...sim.food]) {
+          const radius = 'speed' in object ? 13 : 'kind' in object ? 23 : 3;
+          expect(Number.isFinite(object.x + object.y)).toBe(true);
+          expect(object.x).toBeGreaterThanOrEqual(BOUNDS.left + radius); expect(object.x).toBeLessThanOrEqual(BOUNDS.right - radius);
+          expect(object.y).toBeGreaterThanOrEqual(BOUNDS.top + radius); expect(object.y).toBeLessThanOrEqual(BOUNDS.bottom - radius);
+          expect(sim.rocks.every(r => distance(object, r) >= r.r + radius - .001)).toBe(true);
+        }
+        for (let stations = 1; stations <= 6; stations++) {
+          sim.settings.stations = stations; sim.applySettings();
+          expect(sim.stations).toHaveLength(stations);
+          expect(sim.stations.every(s => sim.rocks.every(r => distance(s, r) >= r.r + 28 * sim.environmentScale - .001))).toBe(true);
+          for (let i = 1; i < stations; i++) expect(sim.stations.slice(0, i).every(s => Math.abs(s.x - sim.stations[i].x) >= 64 * sim.environmentScale - .001)).toBe(true);
+        }
+      }
+      sim.resize(640, 1280); sim.reset();
+      expect(WIDTH).toBe(640); expect(HEIGHT).toBe(1280);
+      expect(sim.fish).toHaveLength(40); expect(sim.predators).toHaveLength(8); expect(sim.stations).toHaveLength(6);
+      for (let i = 0; i < 1200; i++) sim.update(1 / 60);
+      expect(sim.fish.every(f => Number.isFinite(f.x + f.y) && f.y <= BOUNDS.bottom && sim.rocks.every(r => distance(f, r) >= r.r + 13 - .001))).toBe(true);
+    } finally { sim.resize(BASE_WIDTH, BASE_HEIGHT); }
+  });
   it('mixes five fish species and three enemy kinds without resetting independent fish', () => {
     const sim = new Aquarium({ ...DEFAULTS, predators: 3 });
     expect(new Set(sim.fish.map(f => f.species))).toEqual(new Set(FISH_SPECIES));

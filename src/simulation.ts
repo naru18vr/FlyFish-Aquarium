@@ -1,4 +1,4 @@
-import { angleDiff, BOUNDS, clamp, distance, HEIGHT, random, safePosition, SpatialGrid, WIDTH } from './math';
+import { angleDiff, BASE_HEIGHT, BASE_WIDTH, BOUNDS, clamp, distance, HEIGHT, random, safePosition, setWorldSize, SpatialGrid, WIDTH } from './math';
 import { emptySense, idleMotor, type Fish, type Food, type Motor, type Point, type Predator, type Rock, type Settings, type Station } from './types';
 import { FISH_PROFILES, FISH_SPECIES, PREDATOR_KINDS, PREDATOR_PROFILES } from './species';
 
@@ -10,8 +10,23 @@ export class Aquarium {
   private rng = random(481516); private fishId = 0; private foodId = 0;
   private fishGrid = new SpatialGrid<Fish>(); private foodGrid = new SpatialGrid<Food>(); private predatorGrid = new SpatialGrid<Predator>();
   private aiTime = 0;
-  private stationRocks: boolean | undefined;
-  constructor(public settings: Settings) { this.applySettings(); }
+  private stationLayout = '';
+  constructor(public settings: Settings) { setWorldSize(BASE_WIDTH, BASE_HEIGHT); this.applySettings(); }
+  get environmentScale() { return Math.min(1.25, WIDTH / BASE_WIDTH); }
+  resize(width: number, height: number) {
+    const oldWidth = WIDTH, oldHeight = HEIGHT;
+    setWorldSize(width, height);
+    const scale = this.environmentScale, ground = HEIGHT - 70;
+    for (const [i, rock] of this.rocks.entries()) {
+      rock.x = [291, 822, 879][i] / BASE_WIDTH * WIDTH;
+      rock.y = ground - [50, 53, 22][i] * scale; rock.r = [54, 65, 31][i] * scale;
+    }
+    for (const object of [...this.fish, ...this.predators, ...this.food]) { object.x *= WIDTH / oldWidth; object.y *= HEIGHT / oldHeight; }
+    this.applySettings();
+    for (const food of this.food) Object.assign(food, safePosition(food, this.activeRocks(), 3));
+    this.aiTime = .05;
+    this.fishGrid.rebuild(this.fish); this.foodGrid.rebuild(this.food); this.predatorGrid.rebuild(this.predators);
+  }
   activeRocks() { return this.settings.rocks ? this.rocks : []; }
   applySettings() {
     while (this.predators.length < this.settings.predators) {
@@ -19,18 +34,20 @@ export class Aquarium {
       this.predators.push({ id, kind: this.settings.predatorKind === 'mixed' ? PREDATOR_KINDS[id % PREDATOR_KINDS.length] : this.settings.predatorKind, x: WIDTH * (.7 + this.rng() * .15), y: HEIGHT * (.3 + this.rng() * .3), angle: this.rng() * Math.PI * 2, state: 'PATROL', timer: 3 + id, target: null });
     }
     this.predators.length = this.settings.predators;
-    if (this.stations.length !== this.settings.stations || this.stationRocks !== this.settings.rocks) {
+    const layout = `${WIDTH}/${HEIGHT}/${this.settings.stations}/${this.settings.rocks}`;
+    if (this.stationLayout !== layout) {
       const stations: Station[] = [];
+      const scale = this.environmentScale, y = HEIGHT - 70 - 26 * scale;
       for (let i = 0; i < this.settings.stations; i++) {
         const preferred = 100 + (WIDTH - 200) * (i + .5) / this.settings.stations;
         let best = 60, bestDistance = Infinity;
-        for (let x = 60; x <= WIDTH - 60; x += 4) {
-          if (this.activeRocks().some(r => distance({ x, y: 624 }, r) < r.r + 28) || stations.some(s => Math.abs(s.x - x) < 64)) continue;
+        for (let x = 60 * scale; x <= WIDTH - 60 * scale; x += 4 * scale) {
+          if (this.activeRocks().some(r => distance({ x, y }, r) < r.r + 28 * scale) || stations.some(s => Math.abs(s.x - x) < 64 * scale)) continue;
           if (Math.abs(x - preferred) < bestDistance) { best = x; bestDistance = Math.abs(x - preferred); }
         }
-        stations.push({ x: best, y: 624, timer: this.stations[i]?.timer ?? 1.2 + i * 1.7 });
+        stations.push({ x: best, y, timer: this.stations[i]?.timer ?? 1.2 + i * 1.7 });
       }
-      this.stations = stations; this.stationRocks = this.settings.rocks;
+      this.stations = stations; this.stationLayout = layout;
     }
     while (this.fish.length < this.settings.fishCount) this.fish.push(this.spawnFish());
     this.fish.length = this.settings.fishCount;
@@ -48,7 +65,7 @@ export class Aquarium {
   }
   reset() {
     this.fish = []; this.predators = []; this.food = []; this.stations = [];
-    this.time = 0; this.aiTime = 0; this.eaten = 0; this.selected = null; this.rng = random(481516);
+    this.time = 0; this.aiTime = 0; this.eaten = 0; this.selected = null; this.rng = random(481516); this.stationLayout = '';
     this.applySettings();
   }
   private spawnFish(): Fish {
@@ -149,7 +166,7 @@ export class Aquarium {
     if (this.aiTime >= .05) { this.aiTime %= .05; this.senseAndThink(); }
     for (const s of this.stations) {
       s.timer -= dt;
-      if (s.timer <= 0) { this.feed(s.x, false, s.y - 42, 2); s.timer = 7 + this.rng() * 4; }
+      if (s.timer <= 0) { this.feed(s.x, false, s.y - 42 * this.environmentScale, 2); s.timer = 7 + this.rng() * 4; }
     }
     for (const food of this.food) {
       food.age += dt; food.y += (food.y > BOUNDS.bottom - 8 ? 0 : 13) * dt;
@@ -171,7 +188,7 @@ export class Aquarium {
       f.angle = angleDiff(f.angle, 0);
       const targetSpeed = clamp((22 + f.action.accelerate * 140) * profile.speed * (1 - f.action.brake * .65) * (1 + f.traits.maxSpeed * variation), 0, 190);
       f.speed += (targetSpeed - f.speed) * Math.min(1, dt * 3);
-      if (this.settings.seaweed && f.y > 465 && [80, 190, 610, 1040, 1120].some(x => Math.abs(x - f.x) < 26)) f.speed *= Math.exp(-dt * .5);
+      if (this.settings.seaweed && f.y > HEIGHT - 255 && [80, 190, 610, 1040, 1120].some(x => Math.abs(x * WIDTH / BASE_WIDTH - f.x) < 26)) f.speed *= Math.exp(-dt * .5);
       f.vx = Math.cos(f.angle) * f.speed; f.vy = Math.sin(f.angle) * f.speed;
       // dt and speed bounds keep displacement smaller than fish radius, so no tunnelling.
       const pos = safePosition({ x: f.x + f.vx * dt, y: f.y + f.vy * dt }, this.activeRocks());

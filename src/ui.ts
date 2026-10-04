@@ -18,12 +18,17 @@ export class UI {
   onSetting: (key: keyof Settings, value: Settings[keyof Settings]) => void = () => {};
   onPause = () => {}; onReset = () => {}; onFeed = () => {}; onInspect = () => {}; onCloseInspector = () => {};
   private lastAnnouncement = ''; private toastTimer = 0;
+  tankActive = false;
+  onTankMode: (active: boolean) => void = () => {};
+  private returnFocus: HTMLElement | null = null;
+  private returnScroll = 0;
+  private ownsFullscreen = false;
   constructor(private settings: Settings) {
     document.querySelector('#app')!.innerHTML = `
       <header class="site-header"><a class="brand" href="./" aria-label="FlyFish Aquarium ホーム"><img src="./favicon.svg" alt="" width="38" height="38"><span>FlyFish<span class="brand-light"> Aquarium</span></span></a><div class="header-right"><span class="header-note"><span class="tiny-dot"></span> a little life, a little science</span><button class="icon-button" id="about-open" aria-label="この水槽について">${icon('info')}</button><button class="icon-button settings-toggle" id="settings-toggle" aria-label="設定パネルを開閉" aria-expanded="true">${icon('settings')}</button></div></header>
-      <main><div class="intro"><div><div class="eyebrow">YOUR LITTLE CONNECTED WORLD</div><h1>小さな水槽、<span>大きな好奇心。</span></h1><p>ハエの神経回路で泳ぐ魚たち。ふれて、混ぜて、じっくり眺めよう。</p></div><div class="live-pill"><span class="tiny-dot"></span><span id="live-label">水槽は活動中</span></div></div>
-      <div class="workspace"><section class="aquarium-card" aria-label="水槽"><div class="tank-toolbar"><div class="tank-title"><span class="tiny-dot"></span><span>THE AQUARIUM</span><span class="tank-number">01</span></div><div class="tank-actions"><button id="pause" class="icon-button" aria-label="一時停止" aria-pressed="false">${icon('pause', 17)}</button><button id="reset" class="icon-button" aria-label="水槽をリセット">${icon('reset', 17)}</button><span class="divider"></span><button id="fullscreen" class="icon-button" aria-label="水槽を全画面表示">${icon('expand', 17)}</button></div></div>
-      <div id="tank"><div class="loading" id="loading"><img src="./favicon.svg" alt=""><span>小さな世界を準備中…</span></div><div class="tank-tag"><span class="tag-dot"></span><span id="tank-mode">HYBRID ECOSYSTEM</span></div><div class="tank-bottom-label"><span id="tank-fish-count">24</span> little swimmers <span class="label-dot">·</span> make yourself at home</div><div class="toast" id="toast" role="status"></div><div class="inspect-card" id="inspector" hidden></div></div>
+      <main><div class="intro"><div><div class="eyebrow">YOUR LITTLE CONNECTED WORLD</div><h1>小さな水槽、<span>大きな好奇心。</span></h1><p>ハエの神経回路で泳ぐ魚たち。ふれて、混ぜて、じっくり眺めよう。</p></div><div class="intro-actions"><button id="tank-open" class="tank-open">${icon('expand', 17)} 水槽モード</button><div class="live-pill"><span class="tiny-dot"></span><span id="live-label">水槽は活動中</span></div></div></div>
+      <div class="workspace"><section class="aquarium-card" aria-label="水槽"><div class="tank-toolbar"><div class="tank-title"><span class="tiny-dot"></span><span>THE AQUARIUM</span><span class="tank-number">01</span></div><div class="tank-actions"><button id="pause" class="icon-button" aria-label="一時停止" aria-pressed="false">${icon('pause', 17)}</button><button id="reset" class="icon-button" aria-label="水槽をリセット">${icon('reset', 17)}</button><span class="divider"></span><button id="fullscreen" class="icon-button" aria-label="水槽モードを開く">${icon('expand', 17)}</button></div></div>
+      <div id="tank"><div class="loading" id="loading"><img src="./favicon.svg" alt=""><span>小さな世界を準備中…</span></div><div class="tank-tag"><span class="tag-dot"></span><span id="tank-mode">HYBRID ECOSYSTEM</span></div><div class="tank-bottom-label"><span id="tank-fish-count">24</span> little swimmers <span class="label-dot">·</span> make yourself at home</div><div class="toast" id="toast" role="status"></div><div class="inspect-card" id="inspector" hidden></div><div id="tank-controls" class="tank-controls" role="toolbar" aria-label="水槽モードの操作" aria-hidden="true"><button id="tank-feed" aria-label="餌をあげる">${icon('food')}</button><button id="tank-inspect" aria-label="脳をのぞく" aria-pressed="false">${icon('brain')}</button><button id="tank-pause" aria-label="一時停止" aria-pressed="false">${icon('pause')}</button><button id="tank-browser-fullscreen" aria-label="ブラウザーも全画面にする">${icon('expand')}</button><span class="tank-control-divider"></span><button id="tank-exit">${icon('close', 17)} 戻る</button></div></div>
       <div class="tank-footer"><div class="tank-metric">${icon('fish', 19)}<strong id="metric-fish">24</strong><span>匹の魚</span></div><div class="tank-metric brain-metric">${icon('brain', 18)}<span>Fly Brain</span><strong id="metric-brain">70%</strong></div><div class="fps-metric"><span class="tiny-dot"></span><span id="fps">—</span> FPS</div></div>
       <div class="interaction-guide"><div>${icon('food', 21)}<span><strong>餌をあげる</strong><small>空いている場所をクリック</small></span></div><div>${icon('fish', 21)}<span><strong>びっくりさせる</strong><small>魚をクリック</small></span></div><button id="inspect-mode" aria-pressed="false">${icon('brain', 21)}<span><strong>脳をのぞく</strong><small>Shift ＋ クリック / タップで選択</small></span></button></div>
       <div class="observation-note"><span class="note-spark">✳</span><p>同じ水槽、違う泳ぎ方。<span>脳のブレンドを変えると、魚たちのふるまいも変わります。</span></p><button id="feed-button">餌をひとつまみ ${icon('food', 17)}</button></div></section>
@@ -63,10 +68,25 @@ export class UI {
       document.querySelector('#settings-toggle')!.setAttribute('aria-expanded', String(!closed));
     };
     document.querySelector<HTMLButtonElement>('#settings-reset')!.onclick = () => { for (const [key, value] of Object.entries(DEFAULTS)) this.onSetting(key as keyof Settings, value); this.sync(); this.toast('設定を初期値に戻しました'); };
-    document.querySelector<HTMLButtonElement>('#fullscreen')!.onclick = async () => {
-      try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.querySelector('.aquarium-card')!.requestFullscreen(); }
-      catch { this.toast('このブラウザーでは全画面表示が使えません'); }
+    for (const id of ['fullscreen', 'tank-open']) document.querySelector<HTMLButtonElement>(`#${id}`)!.onclick = () => this.tankMode(true);
+    document.querySelector<HTMLButtonElement>('#tank-exit')!.onclick = () => this.tankMode(false);
+    document.querySelector<HTMLButtonElement>('#tank-feed')!.onclick = () => this.onFeed();
+    document.querySelector<HTMLButtonElement>('#tank-pause')!.onclick = () => this.onPause();
+    document.querySelector<HTMLButtonElement>('#tank-inspect')!.onclick = () => this.onInspect();
+    const browserFullscreen = document.querySelector<HTMLButtonElement>('#tank-browser-fullscreen')!;
+    browserFullscreen.hidden = !document.fullscreenEnabled || typeof document.documentElement.requestFullscreen !== 'function';
+    browserFullscreen.onclick = async () => {
+      try {
+        if (document.fullscreenElement) await document.exitFullscreen();
+        else { this.ownsFullscreen = true; await document.documentElement.requestFullscreen(); }
+      } catch { this.ownsFullscreen = false; this.toast('水槽モードのままお楽しみください'); }
     };
+    document.addEventListener('fullscreenchange', () => {
+      if (this.ownsFullscreen && !document.fullscreenElement) { this.ownsFullscreen = false; this.tankMode(false); }
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && this.tankActive) { event.preventDefault(); event.stopPropagation(); this.tankMode(false); }
+    }, true);
     const about = document.querySelector<HTMLDialogElement>('#about')!;
     for (const id of ['about-open', 'credits-open']) document.querySelector<HTMLButtonElement>(`#${id}`)!.onclick = () => about.showModal();
     for (const id of ['about-close', 'about-done']) document.querySelector<HTMLButtonElement>(`#${id}`)!.onclick = () => about.close();
@@ -95,13 +115,29 @@ export class UI {
     document.querySelector('#predator-kind-help')!.textContent = this.settings.predatorKind === 'mixed' ? this.settings.predators < 3 ? '3匹以上にすると、3種類が登場します。' : 'サメは追跡、クラゲは漂い、イカはダッシュ。' : PREDATOR_PROFILES[this.settings.predatorKind].description;
     document.querySelector('#tank-mode')!.textContent = this.settings.flyWeight === 0 ? 'PROGRAM ECOSYSTEM' : this.settings.flyWeight === 1 ? 'FLY BRAIN ECOSYSTEM' : 'HYBRID ECOSYSTEM';
   }
+  tankMode(active: boolean) {
+    if (active === this.tankActive) return;
+    if (active) { this.returnFocus = document.activeElement as HTMLElement; this.returnScroll = window.scrollY; }
+    this.tankActive = active;
+    document.body.classList.toggle('tank-view', active);
+    document.querySelector('#tank-controls')!.setAttribute('aria-hidden', String(!active));
+    this.onTankMode(active);
+    if (active) (document.querySelector<HTMLCanvasElement>('#tank canvas') ?? document.querySelector<HTMLButtonElement>('#tank-exit'))?.focus({ preventScroll: true });
+    else {
+      if (this.ownsFullscreen && document.fullscreenElement) { this.ownsFullscreen = false; void document.exitFullscreen().catch(() => {}); }
+      window.scrollTo(0, this.returnScroll);
+      (this.returnFocus?.isConnected ? this.returnFocus : document.querySelector<HTMLButtonElement>('#tank-open'))?.focus({ preventScroll: true });
+    }
+  }
   pause(paused: boolean) {
     const button = document.querySelector('#pause')!;
     button.innerHTML = icon(paused ? 'play' : 'pause', 17); button.setAttribute('aria-label', paused ? '再開' : '一時停止'); button.setAttribute('aria-pressed', String(paused));
+    const tankButton = document.querySelector('#tank-pause')!;
+    tankButton.innerHTML = icon(paused ? 'play' : 'pause'); tankButton.setAttribute('aria-label', paused ? '再開' : '一時停止'); tankButton.setAttribute('aria-pressed', String(paused));
     document.querySelector('#live-label')!.textContent = paused ? '水槽はひと休み中' : '水槽は活動中';
     document.querySelector('.live-pill')!.classList.toggle('paused', paused);
   }
-  inspecting(active: boolean) { document.querySelector('#inspect-mode')!.classList.toggle('active', active); document.querySelector('#inspect-mode')!.setAttribute('aria-pressed', String(active)); document.querySelector('#tank')!.classList.toggle('inspect-mode', active); }
+  inspecting(active: boolean) { for (const id of ['inspect-mode', 'tank-inspect']) { document.querySelector(`#${id}`)!.classList.toggle('active', active); document.querySelector(`#${id}`)!.setAttribute('aria-pressed', String(active)); } document.querySelector('#tank')!.classList.toggle('inspect-mode', active); }
   brainReady(neurons: number, edges: number) { document.querySelector('#brain-status')!.textContent = `${neurons} neurons · ${QUALITY[this.settings.quality].hz} Hz`; document.querySelector('.brain-visual')!.setAttribute('title', `${edges.toLocaleString()} measured connections`); }
   toast(message: string) {
     const toast = document.querySelector('#toast')!; toast.textContent = message; toast.classList.add('visible');

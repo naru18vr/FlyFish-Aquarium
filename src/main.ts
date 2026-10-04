@@ -4,7 +4,7 @@ import { AquariumRenderer } from './renderer';
 import { UI } from './ui';
 import { isConnectome } from './brain/connectome';
 import { FISH_SPECIES, PREDATOR_KINDS, type FishSelection, type PredatorSelection } from './species';
-import { BOUNDS, clamp, HEIGHT, WIDTH } from './math';
+import { BASE_HEIGHT, BASE_WIDTH, BOUNDS, clamp, HEIGHT, tankSize, WIDTH } from './math';
 import { DEFAULTS, QUALITY, idleMotor, type BrainRequest, type BrainResponse, type Settings } from './types';
 
 // Preserve only recognized, bounded values. Storage may be unavailable in private mode.
@@ -60,6 +60,15 @@ ui.onReset = () => { sim.reset(); restartBrain(); send({ type: 'reset', revision
 ui.onFeed = () => { sim.feed(WIDTH * (.3 + Math.random() * .4)); ui.toast('餌をひとつまみ。集まってくるかな？'); };
 ui.onInspect = () => { inspecting = !inspecting; ui.inspecting(inspecting); if (inspecting) ui.toast('気になる魚をタップして、脳をのぞこう'); };
 ui.onCloseInspector = () => { sim.selected = null; ui.inspector(undefined, 0); };
+function syncTankSize() {
+  const tank = document.querySelector<HTMLElement>('#tank')!;
+  const size = ui.tankActive ? tankSize(tank.clientWidth, tank.clientHeight) : { width: BASE_WIDTH, height: BASE_HEIGHT };
+  if (size.width !== WIDTH || size.height !== HEIGHT) { sim.resize(size.width, size.height); renderer.resize(); }
+}
+ui.onTankMode = () => {
+  sim.selected = null; inspecting = false; ui.inspecting(false); ui.inspector(undefined, 0);
+  syncTankSize();
+};
 
 async function startBrain() {
   const controller = new AbortController();
@@ -95,6 +104,8 @@ async function start() {
     console.error(error); document.querySelector('#loading')!.textContent = '描画を開始できませんでした。WebGL対応のブラウザーで、ページを再読み込みしてください。'; return;
   }
   document.querySelector('#loading')!.remove();
+  new ResizeObserver(syncTankSize).observe(document.querySelector('#tank')!);
+  syncTankSize();
   renderer.app.canvas.addEventListener('pointerdown', event => {
     if (event.button !== 0 || !event.isPrimary) return;
     const rect = renderer.app.canvas.getBoundingClientRect();
@@ -145,8 +156,9 @@ async function start() {
   requestAnimationFrame(frame);
   // Read-only diagnostics are opt-in and never run neural computation on main.
   if (new URLSearchParams(location.search).has('debug')) {
-    Object.defineProperty(window, '__aquarium', { value: { sim, get ready() { return ready; }, get workerMs() { return workerMs; }, get paused() { return paused; }, get brainFailed() { return brainFailed; } } });
+    Object.defineProperty(window, '__aquarium', { value: { sim, get width() { return WIDTH; }, get height() { return HEIGHT; }, get ready() { return ready; }, get workerMs() { return workerMs; }, get paused() { return paused; }, get brainFailed() { return brainFailed; } } });
     (document.querySelector('#debug-toggle') as HTMLInputElement).checked = true;
   }
+  if (new URLSearchParams(location.search).has('tank')) ui.tankMode(true);
 }
 void start();

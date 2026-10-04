@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Sprite, Texture } from 'pixi.js';
-import { HEIGHT, random, WIDTH } from './math';
+import { BASE_HEIGHT, BASE_WIDTH, HEIGHT, random, WIDTH } from './math';
 import type { Aquarium } from './simulation';
 import type { Fish, Point } from './types';
 import { FISH_PROFILES, FISH_SPECIES, PREDATOR_KINDS, PREDATOR_PROFILES, type FishSpecies, type PredatorKind } from './species';
@@ -33,6 +33,7 @@ export class AquariumRenderer {
   private bubblePoints: { x: number; y: number; speed: number; r: number; phase: number }[] = [];
   private ripple: (Point & { age: number; kind: string })[] = [];
   private settingsKey = '';
+  private initialized = false;
   async init(host: HTMLElement) {
     await this.app.init({ width: WIDTH, height: HEIGHT, antialias: false, background: '#143f46', resolution: 1, preference: 'webgl' });
     host.prepend(this.app.canvas);
@@ -49,30 +50,42 @@ export class AquariumRenderer {
     this.bubblePoints = Array.from({ length: 36 }, () => ({ x: 45 + rng() * (WIDTH - 90), y: rng() * HEIGHT, r: 2 + Math.floor(rng() * 3), speed: 15 + rng() * 27, phase: rng() * 6.28 }));
     // Simulation owns the animation clock, so there is only one RAF loop.
     this.app.stop();
+    this.initialized = true;
+  }
+  resize() {
+    if (!this.initialized) return;
+    const oldWidth = this.app.renderer.width, oldHeight = this.app.renderer.height;
+    this.app.renderer.resize(WIDTH, HEIGHT);
+    this.background.removeChildren().forEach(child => child.destroy());
+    this.plants.removeChildren().forEach(child => child.destroy()); this.plantSprites = [];
+    this.drawBackground(); this.drawPlants(); this.settingsKey = '';
+    for (const bubble of this.bubblePoints) { bubble.x *= WIDTH / oldWidth; bubble.y *= HEIGHT / oldHeight; }
+    this.ripple = [];
   }
   private drawBackground() {
     const g = new Graphics();
+    const ground = HEIGHT - 70, xScale = WIDTH / BASE_WIDTH;
     const bands = ['#23666a', '#226469', '#205f65', '#1d595f', '#1a535b', '#184d55', '#16474f', '#15444b', '#143f46', '#143c43'];
-    bands.forEach((color, i) => g.rect(0, i * 72, WIDTH, 73).fill(color));
-    g.poly([110, 20, 206, 20, 480, 640, 252, 640]).fill({ color: '#c4efc6', alpha: .032 });
-    g.poly([425, 20, 488, 20, 770, 640, 620, 640]).fill({ color: '#c4efc6', alpha: .025 });
-    g.poly([890, 20, 943, 20, 1190, 640, 1040, 640]).fill({ color: '#c4efc6', alpha: .025 });
+    bands.forEach((color, i) => g.rect(0, i * HEIGHT / 10, WIDTH, HEIGHT / 10 + 1).fill(color));
+    g.poly([110 * xScale, 20, 206 * xScale, 20, 480 * xScale, ground - 10, 252 * xScale, ground - 10]).fill({ color: '#c4efc6', alpha: .032 });
+    g.poly([425 * xScale, 20, 488 * xScale, 20, 770 * xScale, ground - 10, 620 * xScale, ground - 10]).fill({ color: '#c4efc6', alpha: .025 });
+    g.poly([890 * xScale, 20, 943 * xScale, 20, 1190 * xScale, ground - 10, 1040 * xScale, ground - 10]).fill({ color: '#c4efc6', alpha: .025 });
     g.rect(0, 0, WIDTH, 10).fill('#629b8e'); g.rect(0, 10, WIDTH, 8).fill('#477f79');
     const rng = random(1701);
-    for (let i = 0; i < 150; i++) g.rect(Math.floor(rng() * WIDTH / 4) * 4, Math.floor(25 + rng() * 600), 2, 2).fill({ color: '#a6cfc2', alpha: .09 });
-    for (let i = 0; i < 60; i++) g.rect(i * 22, 22 + (i % 3) * 3, 15, 2).fill({ color: '#bce4c8', alpha: .2 });
+    for (let i = 0; i < 150; i++) g.rect(Math.floor(rng() * WIDTH / 4) * 4, Math.floor(25 + rng() * (HEIGHT - 120)), 2, 2).fill({ color: '#a6cfc2', alpha: .09 });
+    for (let i = 0; i < 60; i++) g.rect(i * WIDTH / 60, 22 + (i % 3) * 3, 15, 2).fill({ color: '#bce4c8', alpha: .2 });
     // Far-away vegetation and soft rocky silhouettes add depth.
     for (let i = 0; i < 18; i++) {
       const x = rng() * WIDTH, h = 60 + rng() * 190;
-      g.poly([x - 13, 650, x - 9, 650 - h * .6, x + 2, 650 - h, x + 12, 650 - h * .4, x + 17, 650]).fill({ color: '#35716b', alpha: .22 });
+      g.poly([x - 13, ground, x - 9, ground - h * .6, x + 2, ground - h, x + 12, ground - h * .4, x + 17, ground]).fill({ color: '#35716b', alpha: .22 });
     }
-    g.rect(0, 650, WIDTH, 70).fill('#a4b190'); g.rect(0, 650, WIDTH, 9).fill('#c0c5a1'); g.rect(0, 676, WIDTH, 44).fill('#909f83'); g.rect(0, 707, WIDTH, 13).fill('#738d79');
+    g.rect(0, ground, WIDTH, 70).fill('#a4b190'); g.rect(0, ground, WIDTH, 9).fill('#c0c5a1'); g.rect(0, ground + 26, WIDTH, 44).fill('#909f83'); g.rect(0, ground + 57, WIDTH, 13).fill('#738d79');
     for (let i = 0; i < 320; i++) {
-      const x = Math.floor(rng() * WIDTH / 4) * 4, y = Math.floor((655 + rng() * 60) / 4) * 4;
+      const x = Math.floor(rng() * WIDTH / 4) * 4, y = Math.floor((ground + 5 + rng() * 60) / 4) * 4;
       g.rect(x, y, 3 + Math.floor(rng() * 3) * 2, 2).fill(rng() > .5 ? '#c1c5a1' : '#81997f');
     }
     for (const [x, y] of [[125, 655], [405, 660], [735, 655], [977, 658], [540, 663]]) {
-      g.rect(x, y, 18, 6).fill('#708f80'); g.rect(x + 3, y - 3, 12, 3).fill('#92aa91');
+      g.rect(x * xScale, ground + y - 650, 18, 6).fill('#708f80'); g.rect(x * xScale + 3, ground + y - 653, 12, 3).fill('#92aa91');
     }
     this.background.addChild(g);
   }
@@ -87,7 +100,7 @@ export class AquariumRenderer {
         g.rect(side < 0 ? -leaf : 3, y - 7, leaf, 9).fill(colors[(i + j) % colors.length]);
         g.rect(side < 0 ? -leaf - 3 : leaf - 2, y - 12, 7, 7).fill(colors[(i + j + 1) % colors.length]);
       }
-      g.rect(-10, -7, 20, 7).fill('#42725f'); g.position.set(x, 650);
+      g.rect(-10, -7, 20, 7).fill('#42725f'); g.position.set(x * WIDTH / BASE_WIDTH, HEIGHT - 70);
       this.plants.addChild(g); this.plantSprites.push({ graphics: g, x, phase: i });
     });
     // Small pixel coral accents.
@@ -95,6 +108,7 @@ export class AquariumRenderer {
       const g = new Graphics();
       g.rect(x, 608, 7, 44).fill(color); g.rect(x - 19, 621, 20, 6).fill(color); g.rect(x - 19, 608, 6, 18).fill(color);
       g.rect(x + 5, 631, 19, 6).fill(color); g.rect(x + 19, 615, 6, 20).fill(color); g.rect(x - 4, 604, 14, 6).fill(color);
+      g.position.set(x * (WIDTH / BASE_WIDTH - 1), HEIGHT - BASE_HEIGHT);
       this.plants.addChild(g);
     }
   }
@@ -110,14 +124,16 @@ export class AquariumRenderer {
       g.rect(x + r * .25, y - 5, r * .31, 7).fill('#93a18d');
       g.rect(x - r * .62, y + r * .49, r * .7, 6).fill('#477568');
     }
-    for (const s of sim.stations) {
-      g.ellipse(s.x, 651, 31, 6).fill({ color: '#143c43', alpha: .3 });
-      g.rect(s.x - 26, 633, 52, 13).fill('#5a9284'); g.rect(s.x - 20, 639, 40, 12).fill('#407469');
-      g.rect(s.x - 18, 623, 36, 10).fill('#84b59a'); g.rect(s.x - 11, 627, 22, 6).fill('#204e4d');
-      g.rect(s.x - 12, 614, 24, 9).fill('#b1c99e'); g.rect(s.x - 6, 617, 12, 5).fill('#527c68');
-      g.rect(s.x - 26, 648, 52, 3).fill('#94b695');
-    }
     this.scenery.addChild(g);
+    for (const s of sim.stations) {
+      const station = new Graphics(), scale = sim.environmentScale;
+      station.ellipse(0, 651, 31, 6).fill({ color: '#143c43', alpha: .3 });
+      station.rect(-26, 633, 52, 13).fill('#5a9284'); station.rect(-20, 639, 40, 12).fill('#407469');
+      station.rect(-18, 623, 36, 10).fill('#84b59a'); station.rect(-11, 627, 22, 6).fill('#204e4d');
+      station.rect(-12, 614, 24, 9).fill('#b1c99e'); station.rect(-6, 617, 12, 5).fill('#527c68');
+      station.rect(-26, 648, 52, 3).fill('#94b695');
+      station.scale.set(scale); station.position.set(s.x, HEIGHT - 70 - 650 * scale); this.scenery.addChild(station);
+    }
   }
   effect(point: Point, kind: string) { this.ripple.push({ ...point, age: 0, kind }); }
   render(sim: Aquarium, dt: number) {
@@ -145,7 +161,7 @@ export class AquariumRenderer {
     for (const f of sim.food) { this.food.rect(Math.round(f.x), Math.round(f.y), 4, 4).fill('#dfb876'); this.food.rect(Math.round(f.x), Math.round(f.y), 2, 2).fill('#ffe1a0'); }
     this.bubbles.clear();
     if (sim.settings.bubbles) for (const b of this.bubblePoints) {
-      b.y -= b.speed * dt; if (b.y < 26) b.y = 652;
+      b.y -= b.speed * dt; if (b.y < 26) b.y = HEIGHT - 68;
       const x = Math.round(b.x + Math.sin(sim.time + b.phase) * 8), y = Math.round(b.y);
       this.bubbles.rect(x, y, b.r * 2, b.r * 2).stroke({ color: '#a3d1bd', alpha: .32, width: 1 });
       this.bubbles.rect(x + 1, y + 1, 2, 2).fill({ color: '#d5edcb', alpha: .5 });

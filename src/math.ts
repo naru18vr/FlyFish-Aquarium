@@ -1,7 +1,17 @@
 import type { Point, Rock } from './types';
-export const WIDTH = 1200, HEIGHT = 720;
+export const BASE_WIDTH = 1200, BASE_HEIGHT = 720;
+export let WIDTH = BASE_WIDTH, HEIGHT = BASE_HEIGHT;
 export const BOUNDS = { left: 28, right: WIDTH - 28, top: 44, bottom: HEIGHT - 71 };
 export const clamp = (x: number, lo = 0, hi = 1) => Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : lo;
+export function setWorldSize(width: number, height: number) {
+  WIDTH = Math.round(clamp(width, 640, 8192)); HEIGHT = Math.round(clamp(height, 360, 8192));
+  BOUNDS.right = WIDTH - 28; BOUNDS.bottom = HEIGHT - 71;
+}
+export function tankSize(width: number, height: number) {
+  if (!Number.isFinite(width + height) || width <= 0 || height <= 0) return { width: BASE_WIDTH, height: BASE_HEIGHT };
+  const scale = Math.max(640 / width, 360 / height, Math.min(1, 1440 / width));
+  return { width: Math.round(width * scale), height: Math.round(height * scale) };
+}
 export const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 export const angleDiff = (a: number, b: number) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 export function random(seed: number) {

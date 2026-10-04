@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Aquarium } from '../../src/simulation';
 import { FISH_PROFILES, FISH_SPECIES, PREDATOR_KINDS } from '../../src/species';
-declare global { interface Window { __aquarium: { sim: Aquarium; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
+declare global { interface Window { __aquarium: { sim: Aquarium; width: number; height: number; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
 const pageErrors = new WeakMap<Page, string[]>();
 
 test.beforeEach(async ({ page }) => {
@@ -11,6 +11,71 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.__aquarium?.ready);
 });
 test.afterEach(async ({ page }) => { expect(pageErrors.get(page)).toEqual([]); });
+
+async function expectFilledTank(page: Page) {
+  await expect(page.locator('body')).toHaveClass('tank-view');
+  await expect.poll(() => page.evaluate(() => {
+    const a = window.__aquarium, r = document.querySelector('canvas')!.getBoundingClientRect();
+    return Math.abs(r.x) < 1 && Math.abs(r.y) < 1 && Math.abs(r.width - innerWidth) < 1 && Math.abs(r.height - innerHeight) < 1 && Math.abs(a.width / a.height - innerWidth / innerHeight) < .002;
+  })).toBe(true);
+  await expect(page.locator('.site-header')).not.toBeVisible();
+  await expect(page.locator('#settings-panel')).not.toBeVisible();
+  const controls = (await page.locator('#tank-controls').boundingBox())!;
+  const viewport = page.viewportSize()!;
+  expect(controls.x).toBeGreaterThanOrEqual(0); expect(controls.x + controls.width).toBeLessThanOrEqual(viewport.width);
+  expect(controls.y + controls.height).toBeLessThanOrEqual(viewport.height);
+}
+
+test('screen-filling aquarium supports feeding, inspection, pause and returning with Escape', async ({ page }, testInfo) => {
+  await page.locator('#pause').click();
+  const ids = await page.evaluate(() => window.__aquarium.sim.fish.map(f => f.id));
+  await page.locator('#tank-open').click(); await expectFilledTank(page);
+  await expect(page.locator('#tank-pause')).toHaveAttribute('aria-pressed', 'true');
+  expect(await page.evaluate(() => window.__aquarium.sim.fish.map(f => f.id))).toEqual(ids);
+  await page.evaluate(() => { window.__aquarium.sim.food = []; });
+  await page.locator('#tank-feed').click();
+  expect(await page.evaluate(() => window.__aquarium.sim.food.length)).toBe(5);
+  const canvas = page.locator('#tank canvas');
+  await page.locator('#tank-inspect').click();
+  await page.evaluate(() => {
+    const a = window.__aquarium;
+    a.sim.fish.forEach(f => { f.x = a.width * .8; f.y = a.height * .5; });
+    Object.assign(a.sim.fish[0], { x: a.width * .35, y: a.height * .3 });
+  });
+  const box = (await canvas.boundingBox())!;
+  await canvas.click({ position: { x: box.width * .35, y: box.height * .3 } });
+  await expect(page.locator('#inspector')).toBeVisible();
+  expect(await page.evaluate(() => window.__aquarium.sim.selected)).toBe(ids[0]);
+  await page.locator('#inspector-close').click(); await expect(canvas).toBeFocused();
+  await page.locator('#tank-pause').click();
+  const before = await page.evaluate(() => window.__aquarium.sim.time);
+  await expect.poll(() => page.evaluate(() => window.__aquarium.sim.time)).toBeGreaterThan(before);
+  await page.locator('#tank-pause').click(); await page.waitForTimeout(250);
+  await page.screenshot({ path: testInfo.outputPath('tank-mode.png') });
+  await canvas.focus(); await canvas.press('Escape');
+  await expect(page.locator('body')).not.toHaveClass('tank-view'); await expect(page.locator('#tank-open')).toBeFocused();
+  expect(await page.evaluate(() => [window.__aquarium.width, window.__aquarium.height])).toEqual([1200, 720]);
+  await expect(page.locator('#pause')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#fullscreen').click(); await expectFilledTank(page);
+  await page.locator('#tank-exit').click(); await expect(page.locator('#fullscreen')).toBeFocused();
+});
+
+test('aquarium mode adapts to rotation and opens directly without native fullscreen', async ({ page }) => {
+  await page.addInitScript(() => { Object.defineProperty(document.documentElement, 'requestFullscreen', { value: undefined }); });
+  await page.goto('/?tank&debug'); await page.waitForFunction(() => window.__aquarium?.ready);
+  await expectFilledTank(page); await expect(page.locator('#tank-browser-fullscreen')).not.toBeVisible();
+  await page.locator('#tank-pause').click();
+  for (const viewport of [{ width: 320, height: 640 }, { width: 844, height: 390 }, { width: 412, height: 915 }]) {
+    await page.setViewportSize(viewport); await expectFilledTank(page);
+    const state = await page.evaluate(() => {
+      const a = window.__aquarium;
+      return a.sim.fish.every(f => Number.isFinite(f.x + f.y) && f.x > 28 && f.x < a.width - 28 && f.y > 44 && f.y < a.height - 71);
+    });
+    expect(state).toBe(true);
+  }
+  await page.locator('#tank-exit').click(); await expect(page.locator('#tank-open')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
 
 test('all fish and enemy types can be switched, mixed, inspected and saved', async ({ page }, testInfo) => {
   await page.locator('#pause').click();
