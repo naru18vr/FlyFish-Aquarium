@@ -16,6 +16,7 @@ input[type=range]{height:24px;background-size:100% 4px;background-repeat:no-repe
 .preset-buttons button{color:#65765a}.range-labels,.setting-description,.setting-row label small,.checkbox-row,.panel-footnote{font-size:10px}
 .interaction-guide small{font-size:10px}.settings-panel section{padding-top:20px;padding-bottom:16px}
 #tank canvas:focus-visible{outline:3px solid #dbedb6;outline-offset:-4px}
+.species-row{margin-bottom:16px}.species-row select{min-width:0;max-width:165px;padding:8px 7px;border:1px solid #dbe3ce;border-radius:6px;background:#f2f5e9;color:#58704c;font-size:10px}.species-help{font-size:10px;line-height:1.8;color:#69775e;margin:-5px 0 12px}.species-mix{display:block;width:100%;font-size:10px;padding:9px;border:1px solid #d1ddc3;border-radius:6px;background:#eaf0df;color:#5f794f;margin-bottom:17px}.species-mix:hover{background:#dfe9d2}.inspector-heading>span{min-width:0;line-height:1.7;letter-spacing:.3px}.inspector-heading strong{font-size:11px}.inspector-heading button{flex-shrink:0}
 .aquarium-card:fullscreen #tank{width:min(100%,calc(166.6667dvh - 258.3333px));max-height:none;flex-shrink:0}
 .aquarium-card:fullscreen canvas{width:100%;height:100%;max-height:none}
 @media(max-width:520px){.header-right{gap:0}.tank-actions{gap:0}.tank-tag{top:15px}.interaction-guide small{font-size:9px}.brand{font-size:17px}.brand img{width:28px;height:28px}.site-header{padding:0 12px}}

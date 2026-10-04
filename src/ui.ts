@@ -1,4 +1,5 @@
 import { DEFAULTS, QUALITY, type Fish, type Settings } from './types';
+import { FISH_PROFILES, FISH_SPECIES, PREDATOR_KINDS, PREDATOR_PROFILES } from './species';
 
 const icons = {
   settings: '<path d="m9.5 3-.7 2a7 7 0 0 0-1.5.9l-2.1-.4-2 3.4L4.7 10a8 8 0 0 0 0 1.8l-1.5 1.1 2 3.5 2.1-.4a7 7 0 0 0 1.5.9l.7 2h4l.7-2a7 7 0 0 0 1.5-.9l2.1.4 2-3.5-1.5-1.1a8 8 0 0 0 0-1.8l1.5-1.1-2-3.4-2.1.4a7 7 0 0 0-1.5-.9l-.7-2z"/><circle cx="11.5" cy="10.9" r="3"/>',
@@ -28,8 +29,8 @@ export class UI {
       <div class="observation-note"><span class="note-spark">✳</span><p>同じ水槽、違う泳ぎ方。<span>脳のブレンドを変えると、魚たちのふるまいも変わります。</span></p><button id="feed-button">餌をひとつまみ ${icon('food', 17)}</button></div></section>
       <aside class="settings-panel" id="settings-panel" aria-label="水槽の設定"><div class="panel-header"><div>${icon('settings', 18)}<h2>水槽の設定</h2></div><button class="text-button" id="settings-reset">初期値に戻す</button></div>
       <section class="brain-section"><div class="section-label">BRAIN CONTROL <span>01</span></div><div class="brain-heading">泳ぎ方を、ブレンド。</div><p class="setting-description">神経回路とプログラムAIのバランス</p><div class="preset-buttons"><button data-preset=".9">Fly Brain</button><button data-preset=".5" class="active">Hybrid</button><button data-preset="0">Program</button></div><div class="brain-values"><div><span class="brain-label">${icon('brain', 15)} Fly Brain</span><strong id="fly-value">70<span>%</span></strong></div><div class="program-value"><span class="brain-label">Program</span><strong id="program-value">30<span>%</span></strong></div></div><input id="flyWeight" data-setting="flyWeight" type="range" min="0" max="100" value="70" aria-label="ハエ脳の比率"><div class="range-labels"><span>Program</span><span>Fly Brain</span></div><div class="brain-visual"><div class="neural-graph" aria-hidden="true"><svg viewBox="0 0 230 48"><g fill="none" stroke="#8caa82" stroke-width=".7" opacity=".45"><path d="M8 22 38 10 66 25 96 9 128 22 163 8 195 24 220 13M8 22 38 39 66 25 96 40 128 22 163 40 195 24 220 38M38 10 38 39M96 9 96 40M163 8 163 40M38 10 96 40M96 9 163 40M128 22 195 24"/></g><g fill="#789876"><circle cx="8" cy="22" r="3"/><circle cx="38" cy="10" r="3"/><circle cx="38" cy="39" r="3"/><circle cx="66" cy="25" r="4"/><circle cx="96" cy="9" r="3"/><circle cx="96" cy="40" r="3"/><circle cx="128" cy="22" r="4"/><circle cx="163" cy="8" r="3"/><circle cx="163" cy="40" r="3"/><circle cx="195" cy="24" r="4"/><circle cx="220" cy="13" r="3"/><circle cx="220" cy="38" r="3"/></g></svg></div><div><span class="tiny-dot"></span><span id="brain-status">神経回路を読み込み中</span></div></div></section>
-      <section><div class="section-label">LITTLE SWIMMERS <span>02</span></div>${stepper('fishCount', '魚の数', 'Fish count', 24, 12, 40)}${range('variation', '個体差', .4, '小さく', '大きく')}</section>
-      <section><div class="section-label">ENVIRONMENT <span>03</span></div>${stepper('predators', '敵の数', 'Predators · 魚は減りません', 1, 0, 8)}${stepper('stations', '餌場の数', 'Feeding stations', 2, 0, 6)}<div class="toggles">${[['seaweed', '海藻'], ['rocks', '岩'], ['bubbles', '泡']].map(([key, label]) => `<label class="toggle-chip"><input type="checkbox" data-setting="${key}" checked><span>${label}</span></label>`).join('')}</div></section>
+      <section><div class="section-label">LITTLE SWIMMERS <span>02</span></div><div class="setting-row species-row"><label for="fishSpecies">魚の種類</label><select id="fishSpecies" data-setting="fishSpecies"><option value="mixed">5種類を混ぜる</option>${FISH_SPECIES.map(species => `<option value="${species}">${FISH_PROFILES[species].name}</option>`).join('')}</select></div>${stepper('fishCount', '魚の数', 'Fish count', 24, 12, 40)}${range('variation', '個体差', .4, '小さく', '大きく')}</section>
+      <section><div class="section-label">ENVIRONMENT <span>03</span></div><div class="setting-row species-row"><label for="predatorKind">敵の種類</label><select id="predatorKind" data-setting="predatorKind" aria-describedby="predator-kind-help"><option value="mixed">3種類を混ぜる</option>${PREDATOR_KINDS.map(kind => `<option value="${kind}">${PREDATOR_PROFILES[kind].name}</option>`).join('')}</select></div><p class="species-help" id="predator-kind-help"></p><button class="species-mix" id="predator-mix">3種類をいっしょに</button>${stepper('predators', '敵の数', 'Predators · 魚は減りません', 1, 0, 8)}${stepper('stations', '餌場の数', 'Feeding stations', 2, 0, 6)}<div class="toggles">${[['seaweed', '海藻'], ['rocks', '岩'], ['bubbles', '泡']].map(([key, label]) => `<label class="toggle-chip"><input type="checkbox" data-setting="${key}" checked><span>${label}</span></label>`).join('')}</div></section>
       <details class="advanced"><summary>インタラクション・計算設定 ${icon('chevron', 15)}</summary><div class="advanced-content"><label class="checkbox-row"><input type="checkbox" data-setting="scare" checked>魚をクリックで驚かせる</label>${range('startle', '刺激の強さ', .8, '弱い', '強い')}${range('nearby', '周辺の魚への伝播', .6, 'なし', '強い')}<div class="setting-row"><label for="quality">脳の計算品質</label><select id="quality" data-setting="quality"><option value="low">Low · 5 Hz</option><option value="medium" selected>Medium · 10 Hz</option><option value="high">High · 15 Hz</option></select></div><label class="checkbox-row"><input id="debug-toggle" type="checkbox">開発用の行動ログ</label></div></details>
       <div class="panel-footnote">ひと休みのおともに。<br>操作しなくても、自分のペースで泳ぎます。</div></aside></div>
       <footer class="page-footer"><span>Made of pixels. Powered by connections.</span><button class="text-button" id="credits-open">データ出典とライセンス ${icon('chevron', 13)}</button><a href="https://github.com/naru18vr/FlyFish-Aquarium" target="_blank" rel="noreferrer">GitHub ↗</a></footer></main>
@@ -41,7 +42,7 @@ export class UI {
     document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-setting]').forEach(input => {
       input.addEventListener('input', () => {
         const key = input.dataset.setting as keyof Settings;
-        const value = input instanceof HTMLInputElement && input.type === 'checkbox' ? input.checked : key === 'quality' ? input.value : ['fishCount', 'predators', 'stations'].includes(key) ? +input.value : +input.value / 100;
+        const value = input instanceof HTMLInputElement && input.type === 'checkbox' ? input.checked : input instanceof HTMLSelectElement ? input.value : ['fishCount', 'predators', 'stations'].includes(key) ? +input.value : +input.value / 100;
         this.onSetting(key, value as Settings[keyof Settings]); this.sync();
       });
     });
@@ -51,6 +52,7 @@ export class UI {
       this.onSetting(key, Math.min(+input.max, Math.max(+input.min, this.settings[key] + +(button.dataset.delta!)))); this.sync();
     });
     document.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach(button => button.onclick = () => { this.onSetting('flyWeight', +button.dataset.preset!); this.sync(); });
+    document.querySelector<HTMLButtonElement>('#predator-mix')!.onclick = () => { this.onSetting('predatorKind', 'mixed'); this.onSetting('predators', Math.max(3, this.settings.predators)); this.sync(); this.toast('サメ・クラゲ・イカが登場！'); };
     document.querySelector<HTMLButtonElement>('#pause')!.onclick = () => this.onPause();
     document.querySelector<HTMLButtonElement>('#reset')!.onclick = () => this.onReset();
     document.querySelector<HTMLButtonElement>('#feed-button')!.onclick = () => this.onFeed();
@@ -90,6 +92,7 @@ export class UI {
       const input = document.getElementById(button.dataset.step!) as HTMLInputElement;
       button.disabled = +button.dataset.delta! < 0 ? +input.value <= +input.min : +input.value >= +input.max;
     });
+    document.querySelector('#predator-kind-help')!.textContent = this.settings.predatorKind === 'mixed' ? this.settings.predators < 3 ? '3匹以上にすると、3種類が登場します。' : 'サメは追跡、クラゲは漂い、イカはダッシュ。' : PREDATOR_PROFILES[this.settings.predatorKind].description;
     document.querySelector('#tank-mode')!.textContent = this.settings.flyWeight === 0 ? 'PROGRAM ECOSYSTEM' : this.settings.flyWeight === 1 ? 'FLY BRAIN ECOSYSTEM' : 'HYBRID ECOSYSTEM';
   }
   pause(paused: boolean) {
@@ -113,7 +116,7 @@ export class UI {
       panel.innerHTML = `<div class="inspector-heading"><span>FISH <strong id="inspector-fish-id"></strong></span><button id="inspector-close" aria-label="個体情報を閉じる">${icon('close', 15)}</button></div><div id="inspector-content"></div>`;
       panel.querySelector<HTMLButtonElement>('#inspector-close')!.onclick = () => { this.onCloseInspector(); document.querySelector<HTMLCanvasElement>('#tank canvas')?.focus({ preventScroll: true }); };
     }
-    panel.querySelector('#inspector-fish-id')!.textContent = `#${String(fish.id).padStart(2, '0')}`;
+    panel.querySelector('#inspector-fish-id')!.textContent = `#${String(fish.id).padStart(2, '0')} · ${FISH_PROFILES[fish.species].name}`;
     const bar = (name: string, value: number, color: string) => `<div class="fish-state"><span>${name}</span><div><i style="width:${Math.round(value * 100)}%;background:${color}"></i></div><b>${Math.round(value * 100)}</b></div>`;
     const s = fish.sensory;
     const direction = (left: number, right: number, front: number) => Math.max(left, right, front) < .05 ? '—' : front > Math.max(left, right) * .9 ? 'FRONT' : left > right ? 'LEFT' : 'RIGHT';

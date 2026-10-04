@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Aquarium } from '../../src/simulation';
+import { FISH_PROFILES, FISH_SPECIES, PREDATOR_KINDS } from '../../src/species';
 declare global { interface Window { __aquarium: { sim: Aquarium; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
 const pageErrors = new WeakMap<Page, string[]>();
 
@@ -10,6 +11,32 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.__aquarium?.ready);
 });
 test.afterEach(async ({ page }) => { expect(pageErrors.get(page)).toEqual([]); });
+
+test('all fish and enemy types can be switched, mixed, inspected and saved', async ({ page }, testInfo) => {
+  await page.locator('#pause').click();
+  const ids = await page.evaluate(() => window.__aquarium.sim.fish.map(f => f.id));
+  for (const species of FISH_SPECIES) {
+    await page.locator('#fishSpecies').selectOption(species);
+    expect(await page.evaluate(() => [...new Set(window.__aquarium.sim.fish.map(f => f.species))])).toEqual([species]);
+    await page.locator('#tank canvas').focus(); await page.locator('#tank canvas').press('ArrowRight');
+    await expect(page.locator('#inspector-fish-id')).toContainText(FISH_PROFILES[species].name);
+  }
+  expect(await page.evaluate(() => window.__aquarium.sim.fish.map(f => f.id))).toEqual(ids);
+  for (const kind of PREDATOR_KINDS) {
+    await page.locator('#predatorKind').selectOption(kind);
+    expect(await page.evaluate(() => [...new Set(window.__aquarium.sim.predators.map(p => p.kind))])).toEqual([kind]);
+  }
+  await page.locator('#predator-mix').click(); await expect(page.locator('#predators-value')).toHaveText('3');
+  expect(await page.evaluate(() => [...new Set(window.__aquarium.sim.predators.map(p => p.kind))])).toEqual([...PREDATOR_KINDS]);
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  await expect(page.locator('#fishSpecies')).toHaveValue('clownfish'); await expect(page.locator('#predatorKind')).toHaveValue('mixed');
+  await expect(page.locator('#predators-value')).toHaveText('3');
+  await page.locator('#fishSpecies').selectOption('mixed');
+  expect(await page.evaluate(() => [...new Set(window.__aquarium.sim.fish.map(f => f.species))])).toHaveLength(5);
+  await page.locator('#pause').click(); await page.waitForTimeout(400);
+  await page.screenshot({ path: testInfo.outputPath('species-aquarium.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
 test('starts live, changes counts and presets, pauses, and opens credits', async ({ page }, testInfo) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await expect(page.locator('#brain-status')).toContainText('512 neurons');

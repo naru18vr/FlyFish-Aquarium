@@ -3,6 +3,7 @@ import { Aquarium } from './simulation';
 import { AquariumRenderer } from './renderer';
 import { UI } from './ui';
 import { isConnectome } from './brain/connectome';
+import { FISH_SPECIES, PREDATOR_KINDS, type FishSelection, type PredatorSelection } from './species';
 import { BOUNDS, clamp, HEIGHT, WIDTH } from './math';
 import { DEFAULTS, QUALITY, idleMotor, type BrainRequest, type BrainResponse, type Settings } from './types';
 
@@ -15,6 +16,8 @@ function loadSettings(): Settings {
       const value = saved[key];
       if (typeof settings[key] === 'boolean' && typeof value === 'boolean') Object.assign(settings, { [key]: value });
       else if (key === 'quality' && ['low', 'medium', 'high'].includes(value)) settings.quality = value;
+      else if (key === 'fishSpecies' && ['mixed', ...FISH_SPECIES].includes(value)) settings.fishSpecies = value as FishSelection;
+      else if (key === 'predatorKind' && ['mixed', ...PREDATOR_KINDS].includes(value)) settings.predatorKind = value as PredatorSelection;
       else if (typeof settings[key] === 'number' && typeof value === 'number' && Number.isFinite(value)) {
         const limits = key === 'fishCount' ? [12, 40] : key === 'predators' ? [0, 8] : key === 'stations' ? [0, 6] : [0, 1];
         Object.assign(settings, { [key]: limits[1] > 1 ? Math.round(clamp(value, ...limits as [number, number])) : clamp(value) });

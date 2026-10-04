@@ -1,5 +1,6 @@
 import { angleDiff, BOUNDS, clamp, distance, HEIGHT, random, safePosition, SpatialGrid, WIDTH } from './math';
 import { emptySense, idleMotor, type Fish, type Food, type Motor, type Point, type Predator, type Rock, type Settings, type Station } from './types';
+import { FISH_PROFILES, FISH_SPECIES, PREDATOR_KINDS, PREDATOR_PROFILES } from './species';
 
 export const MAX_FOOD = 100;
 export class Aquarium {
@@ -15,7 +16,7 @@ export class Aquarium {
   applySettings() {
     while (this.predators.length < this.settings.predators) {
       const id = this.predators.length;
-      this.predators.push({ id, x: WIDTH * (.7 + this.rng() * .15), y: HEIGHT * (.3 + this.rng() * .3), angle: this.rng() * Math.PI * 2, state: 'PATROL', timer: 3 + id, target: null });
+      this.predators.push({ id, kind: this.settings.predatorKind === 'mixed' ? PREDATOR_KINDS[id % PREDATOR_KINDS.length] : this.settings.predatorKind, x: WIDTH * (.7 + this.rng() * .15), y: HEIGHT * (.3 + this.rng() * .3), angle: this.rng() * Math.PI * 2, state: 'PATROL', timer: 3 + id, target: null });
     }
     this.predators.length = this.settings.predators;
     if (this.stations.length !== this.settings.stations || this.stationRocks !== this.settings.rocks) {
@@ -34,8 +35,13 @@ export class Aquarium {
     while (this.fish.length < this.settings.fishCount) this.fish.push(this.spawnFish());
     this.fish.length = this.settings.fishCount;
     if (!this.fish.some(f => f.id === this.selected)) this.selected = null;
-    for (const predator of this.predators) { const point = safePosition(predator, this.activeRocks(), 23); predator.x = point.x; predator.y = point.y; }
+    for (const predator of this.predators) {
+      const kind = this.settings.predatorKind === 'mixed' ? PREDATOR_KINDS[predator.id % PREDATOR_KINDS.length] : this.settings.predatorKind;
+      if (kind !== predator.kind) { predator.kind = kind; predator.state = 'PATROL'; predator.target = null; predator.timer = 3 + predator.id; }
+      const point = safePosition(predator, this.activeRocks(), 23); predator.x = point.x; predator.y = point.y;
+    }
     for (const f of this.fish) {
+      f.species = this.settings.fishSpecies === 'mixed' ? FISH_SPECIES[(f.id - 1) % FISH_SPECIES.length] : this.settings.fishSpecies;
       const position = safePosition(f, this.activeRocks()); f.x = position.x; f.y = position.y;
       f.flyWeight = this.settings.flyWeight; f.programWeight = 1 - this.settings.flyWeight;
     }
@@ -52,7 +58,8 @@ export class Aquarium {
       if (this.activeRocks().every(r => distance(point, r) > r.r + 24) && this.stations.every(s => distance(point, s) > 45) && this.predators.every(p => distance(point, p) > 85)) break;
     }
     const traits = () => this.rng() * 2 - 1;
-    return { ...point, id: ++this.fishId, angle: this.rng() * Math.PI * 2, speed: 28 + this.rng() * 20, vx: 0, vy: 0,
+    const id = ++this.fishId;
+    return { ...point, id, species: this.settings.fishSpecies === 'mixed' ? FISH_SPECIES[(id - 1) % FISH_SPECIES.length] : this.settings.fishSpecies, angle: this.rng() * Math.PI * 2, speed: 28 + this.rng() * 20, vx: 0, vy: 0,
       energy: .8 + this.rng() * .2, hunger: .3 + this.rng() * .5, fear: 0, color: Math.floor(this.rng() * 5), phase: this.rng() * Math.PI * 2,
       traits: { maxSpeed: traits(), turnSpeed: traits(), curiosity: traits(), fearSensitivity: traits(), foodSensitivity: traits(), brainNoise: traits() },
       startleLeft: 0, startleRight: 0, eating: 0, fly: idleMotor(), program: idleMotor(), action: idleMotor(), sensory: emptySense(), activity: Array(32).fill(0), spikes: 0, target: null,
@@ -159,9 +166,10 @@ export class Aquarium {
       f.action = { turnLeft: mix('turnLeft'), turnRight: mix('turnRight'), accelerate: mix('accelerate'), brake: mix('brake') };
       f.flyWeight = w; f.programWeight = 1 - w;
       const variation = this.settings.variation * .23;
-      f.angle += (f.action.turnRight - f.action.turnLeft) * 3.5 * (1 + f.traits.turnSpeed * variation) * dt;
+      const profile = FISH_PROFILES[f.species];
+      f.angle += (f.action.turnRight - f.action.turnLeft) * 3.5 * profile.turn * (1 + f.traits.turnSpeed * variation) * dt;
       f.angle = angleDiff(f.angle, 0);
-      const targetSpeed = (22 + f.action.accelerate * 140) * (1 - f.action.brake * .65) * (1 + f.traits.maxSpeed * variation);
+      const targetSpeed = clamp((22 + f.action.accelerate * 140) * profile.speed * (1 - f.action.brake * .65) * (1 + f.traits.maxSpeed * variation), 0, 190);
       f.speed += (targetSpeed - f.speed) * Math.min(1, dt * 3);
       if (this.settings.seaweed && f.y > 465 && [80, 190, 610, 1040, 1120].some(x => Math.abs(x - f.x) < 26)) f.speed *= Math.exp(-dt * .5);
       f.vx = Math.cos(f.angle) * f.speed; f.vy = Math.sin(f.angle) * f.speed;
@@ -179,17 +187,20 @@ export class Aquarium {
       }
     }
     for (const p of this.predators) {
+      const profile = PREDATOR_PROFILES[p.kind];
       p.timer -= dt;
       if (p.state === 'PATROL') {
         p.angle += Math.sin(this.time * .4 + p.id) * dt * .25;
-        const nearby = this.fishGrid.near(p, 175);
-        if (nearby.length && p.timer < 0) { p.target = nearby.reduce((a, b) => distance(p, a) < distance(p, b) ? a : b); p.state = 'CHASE'; p.timer = 2.5; }
+        const nearby = this.fishGrid.near(p, profile.range);
+        if (nearby.length && p.timer < 0) { p.target = nearby.reduce((a, b) => distance(p, a) < distance(p, b) ? a : b); p.state = 'CHASE'; p.timer = profile.duration; }
       } else if (p.state === 'CHASE') {
-        if (p.target && this.fish.includes(p.target)) p.angle += clamp(angleDiff(Math.atan2(p.target.y - p.y, p.target.x - p.x), p.angle), -1.3 * dt, 1.3 * dt);
-        if (p.timer <= 0 || !p.target || !this.fish.includes(p.target) || distance(p, p.target) < 35) { p.state = 'COOLDOWN'; p.timer = 4; p.target = null; }
+        if (p.target && this.fish.includes(p.target)) p.angle += clamp(angleDiff(Math.atan2(p.target.y - p.y, p.target.x - p.x), p.angle), -profile.turn * dt, profile.turn * dt);
+        if (p.timer <= 0 || !p.target || !this.fish.includes(p.target) || distance(p, p.target) < 35) { p.state = 'COOLDOWN'; p.timer = profile.cooldown; p.target = null; }
       } else if (p.timer <= 0) { p.state = 'PATROL'; p.timer = 2; }
-      const speed = p.state === 'CHASE' ? 89 : p.state === 'COOLDOWN' ? 24 : 39;
-      const pos = safePosition({ x: p.x + Math.cos(p.angle) * speed * dt, y: p.y + Math.sin(p.angle) * speed * dt }, this.activeRocks(), 23);
+      let speed = p.state === 'CHASE' ? profile.chase : p.state === 'COOLDOWN' ? profile.rest : profile.patrol;
+      if (p.kind === 'squid') speed *= .55 + .75 * Math.max(0, Math.sin(this.time * 6 + p.id));
+      const drift = p.kind === 'jellyfish' ? Math.sin(this.time * 1.3 + p.id) * 9 : 0;
+      const pos = safePosition({ x: p.x + Math.cos(p.angle) * speed * dt, y: p.y + (Math.sin(p.angle) * speed + drift) * dt }, this.activeRocks(), 23);
       p.x = pos.x; p.y = pos.y;
       if (pos.touched) p.angle += dt * 3;
     }

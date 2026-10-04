@@ -2,43 +2,33 @@ import { Application, Container, Graphics, Sprite, Texture } from 'pixi.js';
 import { HEIGHT, random, WIDTH } from './math';
 import type { Aquarium } from './simulation';
 import type { Fish, Point } from './types';
+import { FISH_PROFILES, FISH_SPECIES, PREDATOR_KINDS, PREDATOR_PROFILES, type FishSpecies, type PredatorKind } from './species';
 
 const palettes = [
   ['#efb969', '#ffd78d', '#ca8653'], ['#e4e4b5', '#fff4ce', '#afb98b'],
   ['#f09c97', '#ffc5ac', '#be717e'], ['#84cbb1', '#b2ead0', '#539c94'],
   ['#b8aad7', '#ded0f2', '#8c86bb'],
 ];
-const fishPattern = [
-  '          aa        ', '         aaaa       ', '       bbbbbbbb     ',
-  'aa    bbbbbbbbbb    ', 'aaa  bbbbbbbbbwwb   ', 'aaaabbbbbbbbbbwebb  ',
-  'aaaabbbbbbbbbbbbbb  ', 'aaa  bbbbccccccbb   ', 'aa    ccccccccbb    ',
-  '       cccccc       ', '          cc        ', '                    ',
-];
-function fishTexture(palette: string[], frame: number, eating = false) {
-  const canvas = document.createElement('canvas'); canvas.width = 22; canvas.height = 13;
+function pixelTexture(pattern: string[], colors: Record<string, string>, frame = 0, eating = false) {
+  const canvas = document.createElement('canvas'); canvas.width = Math.max(...pattern.map(row => row.length)) + 2; canvas.height = pattern.length + 2;
   const context = canvas.getContext('2d')!;
-  const colors: Record<string, string> = { a: palette[2], b: palette[0], c: palette[1], w: '#fffce7', e: '#173c3d' };
-  fishPattern.forEach((line, y) => [...line].forEach((pixel, x) => {
-    if (colors[pixel]) { context.fillStyle = colors[pixel]; context.fillRect(x + (x < 4 && frame === 1 ? 1 : 0), y, 1, 1); }
+  let eye = { x: canvas.width - 5, y: Math.floor(canvas.height / 2) };
+  pattern.forEach((line, y) => [...line].forEach((pixel, x) => {
+    if (colors[pixel]) { context.fillStyle = colors[pixel]; context.fillRect(1 + x + (x < 4 && frame === 1 ? 1 : 0), y + 1, 1, 1); }
+    if (pixel === 'e') eye = { x: x + 1, y: y + 1 };
   }));
-  context.fillStyle = palette[1]; context.fillRect(8, 3, 6, 1); context.fillRect(10, 4, 4, 1);
-  if (eating) { context.fillStyle = '#264d44'; context.fillRect(19, 7, 2, 2); }
+  if (eating) { context.fillStyle = '#264d44'; context.fillRect(Math.min(canvas.width - 3, eye.x + 3), eye.y + 2, 2, 2); }
   const texture = Texture.from(canvas); texture.source.scaleMode = 'nearest'; return texture;
 }
-function predatorTexture() {
-  const canvas = document.createElement('canvas'); canvas.width = 28; canvas.height = 22;
-  const c = canvas.getContext('2d')!;
-  const pattern = ['          aa   aa           ', '        aaaaaaaaaaa         ', '      aabbbbbbbbbbaaa       ', 'aa   abbbbbbbbbbbbbbaa      ', 'aaa abbbccbbbbbbbbbbbaa     ', 'aaaabbbccccbbbbbbwwbbba     ', 'aaaabbbbccbbbbbbbwembbba    ', 'aaaabbbbbbbbbbbbbbbbbbaa    ', 'aaa abbbbbbbbbbbbbbbbaa     ', 'aa   abbdddddddddbbbba      ', '      aadddddddddbbaa       ', '        aaaaaaaaaaa         ', '          aa  aa            '];
-  const colors: Record<string, string> = { a: '#4a6e70', b: '#668b8b', c: '#8baea3', d: '#a8bdb0', w: '#fff1c0', e: '#203f45', m: '#203f45' };
-  pattern.forEach((line, y) => [...line].forEach((pixel, x) => { if (colors[pixel]) { c.fillStyle = colors[pixel]; c.fillRect(x, y + 3, 1, 1); } }));
-  const texture = Texture.from(canvas); texture.source.scaleMode = 'nearest'; return texture;
+function fishTexture(species: FishSpecies, palette: string[], frame: number, eating = false) {
+  return pixelTexture(FISH_PROFILES[species].pattern, { a: palette[2], b: palette[0], c: palette[1], d: '#fff9df', w: '#fffce7', e: '#173c3d' }, frame, eating);
 }
 export class AquariumRenderer {
   app = new Application();
   private background = new Container(); private plants = new Container(); private scenery = new Container(); private creatures = new Container(); private foreground = new Container();
   private food = new Graphics(); private bubbles = new Graphics(); private selection = new Graphics(); private ripples = new Graphics();
   private fishSprites = new Map<number, Sprite>(); private predatorSprites = new Map<number, Sprite>();
-  private textures: Texture[][] = []; private predator = predatorTexture();
+  private textures = new Map<FishSpecies, Texture[][]>(); private predatorTextures = new Map<PredatorKind, Texture>();
   private plantSprites: { graphics: Graphics; x: number; phase: number }[] = [];
   private bubblePoints: { x: number; y: number; speed: number; r: number; phase: number }[] = [];
   private ripple: (Point & { age: number; kind: string })[] = [];
@@ -50,7 +40,8 @@ export class AquariumRenderer {
     this.app.canvas.setAttribute('role', 'img');
     this.app.canvas.tabIndex = 0;
     this.app.canvas.setAttribute('aria-describedby', 'keyboard-help');
-    this.textures = palettes.map(palette => [fishTexture(palette, 0), fishTexture(palette, 1), fishTexture(palette, 0, true)]);
+    for (const species of FISH_SPECIES) this.textures.set(species, palettes.map(palette => [fishTexture(species, palette, 0), fishTexture(species, palette, 1), fishTexture(species, palette, 0, true)]));
+    for (const kind of PREDATOR_KINDS) this.predatorTextures.set(kind, pixelTexture(PREDATOR_PROFILES[kind].pattern, PREDATOR_PROFILES[kind].colors));
     this.app.stage.addChild(this.background, this.plants, this.scenery, this.creatures, this.foreground);
     this.foreground.addChild(this.food, this.bubbles, this.selection, this.ripples);
     this.drawBackground(); this.drawPlants();
@@ -141,9 +132,14 @@ export class AquariumRenderer {
     for (const [id, sprite] of this.predatorSprites) if (!predatorIds.has(id)) { sprite.destroy(); this.predatorSprites.delete(id); }
     for (const p of sim.predators) {
       let sprite = this.predatorSprites.get(p.id);
-      if (!sprite) { sprite = new Sprite(this.predator); sprite.anchor.set(.5); this.creatures.addChild(sprite); this.predatorSprites.set(p.id, sprite); }
-      sprite.position.set(Math.round(p.x), Math.round(p.y)); sprite.scale.set(Math.cos(p.angle) < 0 ? -2.3 : 2.3, 2.3);
-      sprite.rotation = Math.sin(p.angle) * .12; sprite.alpha = p.state === 'COOLDOWN' ? .76 : 1;
+      if (!sprite) { sprite = new Sprite(); sprite.anchor.set(.5); this.creatures.addChild(sprite); this.predatorSprites.set(p.id, sprite); }
+      sprite.texture = this.predatorTextures.get(p.kind)!;
+      const scale = PREDATOR_PROFILES[p.kind].scale, pulse = 1 + Math.sin(sim.time * 3 + p.id) * .07;
+      sprite.position.set(Math.round(p.x), Math.round(p.y));
+      if (p.kind === 'jellyfish') { sprite.scale.set(scale * pulse, scale / pulse); sprite.rotation = Math.sin(sim.time + p.id) * .08; }
+      else if (p.kind === 'squid') { sprite.scale.set(scale * pulse, scale / pulse); sprite.rotation = p.angle + Math.PI / 2; }
+      else { sprite.scale.set(Math.cos(p.angle) < 0 ? -scale : scale, scale); sprite.rotation = Math.sin(p.angle) * .12; }
+      sprite.alpha = p.state === 'COOLDOWN' ? .76 : p.kind === 'jellyfish' ? .88 : 1;
     }
     this.food.clear();
     for (const f of sim.food) { this.food.rect(Math.round(f.x), Math.round(f.y), 4, 4).fill('#dfb876'); this.food.rect(Math.round(f.x), Math.round(f.y), 2, 2).fill('#ffe1a0'); }
@@ -173,10 +169,10 @@ export class AquariumRenderer {
     if (!sprite) { sprite = new Sprite(); sprite.anchor.set(.5); this.creatures.addChild(sprite); this.fishSprites.set(fish.id, sprite); }
     const scared = fish.fear > .38;
     const frame = fish.eating > 0 ? 2 : Math.floor(time * (scared ? 14 : fish.speed > 105 ? 10 : 5) + fish.phase) % 2;
-    sprite.texture = this.textures[fish.color][frame];
-    const scale = 1.8 + (fish.id % 3) * .1;
+    sprite.texture = this.textures.get(fish.species)![fish.color][frame];
+    const scale = FISH_PROFILES[fish.species].scale + (fish.id % 3) * .08;
     sprite.position.set(Math.round(fish.x), Math.round(fish.y + Math.sin(time * 2 + fish.phase) * 1.5));
-    sprite.scale.set((Math.cos(fish.angle) < 0 ? -1 : 1) * scale * (scared ? 1.12 : 1), scale * (scared ? .87 : 1));
+    sprite.scale.set((Math.cos(fish.angle) < 0 ? -1 : 1) * scale * (scared ? fish.species === 'puffer' ? 1.2 : 1.12 : 1), scale * (scared ? fish.species === 'puffer' ? 1.15 : .87 : 1));
     sprite.rotation = Math.sin(fish.angle) * (Math.cos(fish.angle) < 0 ? -1 : 1) * .18;
     sprite.tint = scared ? '#ffe7c5' : '#ffffff';
   }

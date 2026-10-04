@@ -5,6 +5,7 @@ import { isConnectome } from '../../src/brain/connectome';
 import { Aquarium, MAX_FOOD } from '../../src/simulation';
 import { BOUNDS, distance, safePosition, SpatialGrid } from '../../src/math';
 import { DEFAULTS, emptySense, type Connectome, type Quality } from '../../src/types';
+import { FISH_SPECIES, PREDATOR_KINDS } from '../../src/species';
 
 const connectome = data as unknown as Connectome;
 describe('measured neural circuit', () => {
@@ -48,6 +49,42 @@ describe('measured neural circuit', () => {
   });
 });
 describe('aquarium interactions and safety', () => {
+  it('mixes five fish species and three enemy kinds without resetting independent fish', () => {
+    const sim = new Aquarium({ ...DEFAULTS, predators: 3 });
+    expect(new Set(sim.fish.map(f => f.species))).toEqual(new Set(FISH_SPECIES));
+    expect(new Set(sim.predators.map(p => p.kind))).toEqual(new Set(PREDATOR_KINDS));
+    const fish = sim.fish[0]; fish.hunger = .73; fish.startleLeft = .4; sim.selected = fish.id;
+    for (const species of FISH_SPECIES) {
+      sim.settings.fishSpecies = species; sim.applySettings();
+      expect(sim.fish.every(f => f.species === species)).toBe(true);
+      expect(sim.fish[0]).toBe(fish); expect(fish.hunger).toBe(.73); expect(fish.startleLeft).toBe(.4); expect(sim.selected).toBe(fish.id);
+    }
+    sim.settings.fishSpecies = 'mixed'; sim.applySettings();
+    expect(new Set(sim.fish.map(f => f.species))).toEqual(new Set(FISH_SPECIES));
+  });
+  it('switches enemy kinds in place and resets old chase targets', () => {
+    const sim = new Aquarium({ ...DEFAULTS, predators: 8 });
+    const ids = sim.predators.map(p => p.id);
+    for (const kind of PREDATOR_KINDS) {
+      const changedIds = sim.predators.filter(p => p.kind !== kind).map(p => p.id);
+      sim.predators.forEach(p => { p.state = 'CHASE'; p.target = sim.fish[0]; });
+      sim.settings.predatorKind = kind; sim.applySettings();
+      expect(sim.predators.every(p => p.kind === kind)).toBe(true);
+      expect(sim.predators.map(p => p.id)).toEqual(ids);
+      expect(sim.predators.filter(p => changedIds.includes(p.id)).every(p => p.state === 'PATROL' && p.target === null)).toBe(true);
+    }
+    sim.settings.predatorKind = 'mixed'; sim.applySettings();
+    expect(new Set(sim.predators.map(p => p.kind))).toEqual(new Set(PREDATOR_KINDS));
+  });
+  it('gives squid bursts, sharks sustained pursuit, and jellyfish slower drifting', () => {
+    const travelled = PREDATOR_KINDS.map(kind => {
+      const sim = new Aquarium({ ...DEFAULTS, predatorKind: kind }); sim.time = .25;
+      const p = sim.predators[0]; Object.assign(p, { x: 300, y: 250, angle: 0, state: 'CHASE', timer: 5, target: sim.fish[0] });
+      Object.assign(sim.fish[0], { x: 600, y: 250 }); sim.update(.04);
+      return distance(p, { x: 300, y: 250 });
+    });
+    expect(travelled[2]).toBeGreaterThan(travelled[0]); expect(travelled[0]).toBeGreaterThan(travelled[1] * 2);
+  });
   it.each([3, 13, 23])('resolves every point beside overlapping rocks and the floor at radius %s', radius => {
     const sim = new Aquarium({ ...DEFAULTS });
     for (let x = 750; x <= 930; x += 4) for (let y = 560; y <= 680; y += 4) {
