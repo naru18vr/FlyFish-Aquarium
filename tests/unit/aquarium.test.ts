@@ -89,6 +89,13 @@ describe('aquarium interactions and safety', () => {
     expect(Number.isFinite(safePosition({ x: NaN, y: Infinity }, []).x)).toBe(true);
     const r = { x: 500, y: 400, r: 60 }; expect(distance(safePosition(r, [r]), r)).toBeGreaterThanOrEqual(73);
   });
+  it('recovers an invalid fish position, heading, and speed', () => {
+    const sim = new Aquarium({ ...DEFAULTS, flyWeight: 1 });
+    Object.assign(sim.fish[0], { x: NaN, y: Infinity, angle: NaN, speed: NaN });
+    sim.update(1 / 60);
+    const fish = sim.fish[0];
+    expect([fish.x, fish.y, fish.angle, fish.speed, fish.vx, fish.vy].every(Number.isFinite)).toBe(true);
+  });
   it('changes populations and clears removed predator targets', () => {
     const sim = new Aquarium({ ...DEFAULTS });
     sim.settings.fishCount = 30; sim.settings.stations = 6; sim.settings.predators = 8; sim.applySettings();

@@ -138,6 +138,9 @@ export class Aquarium {
     }
     this.food = this.food.filter(food => food.age < 45);
     for (const f of this.fish) {
+      f.angle = Number.isFinite(f.angle) ? f.angle : 0;
+      f.speed = clamp(f.speed, 0, 190);
+      f.fear = clamp(f.fear);
       const w = this.settings.flyWeight;
       const mix = (key: keyof Motor) => clamp(f.fly[key] * w + f.program[key] * (1 - w));
       f.action = { turnLeft: mix('turnLeft'), turnRight: mix('turnRight'), accelerate: mix('accelerate'), brake: mix('brake') };
