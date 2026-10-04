@@ -40,7 +40,7 @@ export class UI {
       <div class="panel-footnote">ひと休みのおともに。<br>操作しなくても、自分のペースで泳ぎます。</div></aside></div>
       <footer class="page-footer"><span>Made of pixels. Powered by connections.</span><button class="text-button" id="credits-open">データ出典とライセンス ${icon('chevron', 13)}</button><a href="https://github.com/naru18vr/FlyFish-Aquarium" target="_blank" rel="noreferrer">GitHub ↗</a></footer></main>
       <dialog id="about" aria-labelledby="about-title"><div class="dialog-header"><span class="eyebrow">A LITTLE LIFE, A LITTLE SCIENCE</span><button class="icon-button" id="about-close" aria-label="閉じる">${icon('close')}</button></div><h2 id="about-title">FlyFish Aquarium</h2><p>ショウジョウバエの公開コネクトーム由来の神経回路を、魚の行動判断に利用したドット絵アクアリウムです。</p><p>魚は餌や敵、仲間、壁、クリック刺激を感知します。ハエ脳とプログラムAIの比率を変え、ふるまいの違いを観察してみてください。</p><div class="about-data"><h3>この水槽で動いている回路</h3><p><strong>FlyWire FAFB v630</strong> の中央複合体（CX）と一部の下行ニューロンから抽出した、最大768ニューロンの接続データ。軽量なLIFモデルをWeb Worker内で計算し、活動状態は魚ごとに独立しています。</p><p>感覚の投射先と魚の運動への読み出しは、このアプリ独自の人工的な対応付けです。接続を切り出し、重みを正規化しているため、生物学的に検証された行動モデルや全脳の完全再現ではありません。</p><h3>出典・ライセンス</h3><p>データ：FlyWire Consortium、Dorkenwald et al. (2024)、Lin et al. (2024)。<a href="https://github.com/murthylab/flywire-network-analysis" target="_blank" rel="noreferrer">Murthy Lab公開データ</a>のv630スナップショットを利用しています。</p><p>コネクトームと派生JSON：<a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noreferrer">CC BY-NC 4.0</a>（非商用）。<a href="https://join.flywire.ai/guidelines" target="_blank" rel="noreferrer">FlyWire公式利用ガイドライン</a><br>本アプリのコード・オリジナルドット絵：MIT。PixiJS / Vite：MIT。TypeScript：Apache-2.0。</p></div><button class="primary-button" id="about-done">水槽にもどる</button></dialog>
-      <p class="sr-only" id="keyboard-help">水槽にフォーカスして、矢印キーで魚を選択。EnterまたはSpaceで選んだ魚を刺激。未選択なら餌をあげます。Escapeで選択を解除。</p><div class="sr-only" id="announcements" aria-live="polite"></div>`;
+      <p class="sr-only" id="keyboard-help">水槽にフォーカスして、矢印キーで魚を選択。EnterまたはSpaceで選んだ魚を刺激。未選択なら餌をあげます。Escapeで選択を解除。水槽モード中はEscapeで通常画面に戻ります。</p><div class="sr-only" id="announcements" aria-live="polite"></div>`;
     this.bind(); this.sync();
   }
   private bind() {
@@ -126,7 +126,7 @@ export class UI {
     else {
       if (this.ownsFullscreen && document.fullscreenElement) { this.ownsFullscreen = false; void document.exitFullscreen().catch(() => {}); }
       window.scrollTo(0, this.returnScroll);
-      (this.returnFocus?.isConnected ? this.returnFocus : document.querySelector<HTMLButtonElement>('#tank-open'))?.focus({ preventScroll: true });
+      (this.returnFocus?.isConnected && this.returnFocus !== document.body ? this.returnFocus : document.querySelector<HTMLButtonElement>('#tank-open'))?.focus({ preventScroll: true });
     }
   }
   pause(paused: boolean) {

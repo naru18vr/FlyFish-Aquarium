@@ -61,7 +61,7 @@ test('screen-filling aquarium supports feeding, inspection, pause and returning 
 });
 
 test('aquarium mode adapts to rotation and opens directly without native fullscreen', async ({ page }) => {
-  await page.addInitScript(() => { Object.defineProperty(document.documentElement, 'requestFullscreen', { value: undefined }); });
+  await page.addInitScript(() => { Object.defineProperty(Element.prototype, 'requestFullscreen', { value: undefined, configurable: true }); });
   await page.goto('/?tank&debug'); await page.waitForFunction(() => window.__aquarium?.ready);
   await expectFilledTank(page); await expect(page.locator('#tank-browser-fullscreen')).not.toBeVisible();
   await page.locator('#tank-pause').click();
