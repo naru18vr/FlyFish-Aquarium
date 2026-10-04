@@ -1,10 +1,13 @@
 import { clamp, random } from '../math';
 import { QUALITY, type Connectome, type Motor, type Quality, type Sensory } from '../types';
 
-interface State { voltage: Float32Array; refractory: Uint8Array; previous: Uint8Array; current: Uint8Array; rates: Float32Array; rng: () => number }
+interface State { voltage: Float32Array; refractory: Uint8Array; previous: Uint8Array; current: Uint8Array; rates: Float32Array; rng: () => number; stepRemainder: number }
 export class BrainModel {
   private states = new Map<number, State>();
   private outgoing: { post: number; weight: number }[][] = [];
+  private syn = new Float32Array(0);
+  private counts = new Float32Array(8);
+  private totals = new Float32Array(8);
   neurons = 0; edges = 0;
   constructor(private data: Connectome, private quality: Quality) { this.configure(quality); }
   configure(quality: Quality) {
@@ -12,6 +15,8 @@ export class BrainModel {
     this.neurons = Math.min(QUALITY[quality].neurons, this.data.neurons.length);
     const sums = new Float32Array(this.neurons);
     this.outgoing = Array.from({ length: this.neurons }, () => []);
+    this.syn = new Float32Array(this.neurons); this.totals.fill(0);
+    for (let i = 0; i < this.neurons; i++) this.totals[this.data.neurons[i].adapterGroup]++;
     this.edges = 0;
     for (const [a, b, count] of this.data.edges) if (a < this.neurons && b < this.neurons) sums[b] += count;
     for (const [a, b, count] of this.data.edges) if (a < this.neurons && b < this.neurons) {
@@ -27,13 +32,14 @@ export class BrainModel {
     let state = this.states.get(id);
     if (!state) {
       const rng = random(id * 9173 + 123);
-      state = { voltage: Float32Array.from({ length: this.neurons }, rng), refractory: new Uint8Array(this.neurons), previous: new Uint8Array(this.neurons), current: new Uint8Array(this.neurons), rates: new Float32Array(this.neurons), rng };
+      state = { voltage: Float32Array.from({ length: this.neurons }, rng), refractory: new Uint8Array(this.neurons), previous: new Uint8Array(this.neurons), current: new Uint8Array(this.neurons), rates: new Float32Array(this.neurons), rng, stepRemainder: 0 };
       this.states.set(id, state);
     }
     return state;
   }
   step(id: number, s: Sensory, noise = .1): { motor: Motor; activity: number[]; spikes: number } {
-    const state = this.state(id), syn = new Float32Array(this.neurons), counts = new Float32Array(8), totals = new Float32Array(8);
+    const state = this.state(id), { syn, counts, totals } = this;
+    counts.fill(0);
     const threat = Math.max(s.enemyLeft, s.enemyRight, s.enemyFront), startle = Math.max(s.startleLeft, s.startleRight);
     // These eight projections are the artificial aquarium adapter. Anatomical
     // connections (not these projections) come from the measured connectome.
@@ -47,7 +53,9 @@ export class BrainModel {
       .5 + s.wallLeft + s.wallRight + s.wallFront,
       .5 + (s.fishLeft + s.fishRight + s.fishFront) * .6,
     ];
-    const substeps = Math.round(200 / QUALITY[this.quality].hz); // 5 ms LIF steps, equal simulated time at every quality.
+    state.stepRemainder += 200 / QUALITY[this.quality].hz;
+    const substeps = Math.floor(state.stepRemainder); // Carry fractional 5 ms steps at 15 Hz.
+    state.stepRemainder -= substeps;
     let spikes = 0;
     for (let tick = 0; tick < substeps; tick++) {
       syn.fill(0);
@@ -66,7 +74,6 @@ export class BrainModel {
       }
       [state.previous, state.current] = [state.current, state.previous];
     }
-    for (let i = 0; i < this.neurons; i++) totals[this.data.neurons[i].adapterGroup]++;
     const rate = (group: number) => clamp(counts[group] / Math.max(1, totals[group] * substeps) * 3.7);
     const activity = Array.from({ length: 32 }, (_, bin) => {
       let total = 0, n = 0;

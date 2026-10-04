@@ -12,8 +12,8 @@ scope.onmessage = ({ data }: MessageEvent<BrainRequest>) => {
     const start = performance.now();
     model.retain(data.fish.map(f => f.id));
     const fish = data.fish.map(f => ({ id: f.id, ...model!.step(f.id, f.sensory, f.noise) }));
-    reply({ type: 'result', elapsed: performance.now() - start, fish });
+    reply({ type: 'result', revision: data.revision, elapsed: performance.now() - start, fish });
     return;
   }
-  if (model) reply({ type: 'ready', neurons: model.neurons, edges: model.edges });
+  if (model) reply({ type: 'ready', revision: data.revision, neurons: model.neurons, edges: model.edges });
 };

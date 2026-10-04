@@ -22,6 +22,15 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deployment-browser-checks
+          path: |
+            playwright-report/
+            test-results/
       - uses: actions/configure-pages@v5
         with:
           enablement: true
@@ -38,3 +47,24 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+  published-check:
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          PLAYWRIGHT_BASE_URL: https://naru18vr.github.io/FlyFish-Aquarium/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: published-browser-checks
+          path: |
+            playwright-report/
+            test-results/

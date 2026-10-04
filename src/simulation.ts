@@ -9,6 +9,7 @@ export class Aquarium {
   private rng = random(481516); private fishId = 0; private foodId = 0;
   private fishGrid = new SpatialGrid<Fish>(); private foodGrid = new SpatialGrid<Food>(); private predatorGrid = new SpatialGrid<Predator>();
   private aiTime = 0;
+  private stationRocks: boolean | undefined;
   constructor(public settings: Settings) { this.applySettings(); }
   activeRocks() { return this.settings.rocks ? this.rocks : []; }
   applySettings() {
@@ -17,7 +18,19 @@ export class Aquarium {
       this.predators.push({ id, x: WIDTH * (.7 + this.rng() * .15), y: HEIGHT * (.3 + this.rng() * .3), angle: this.rng() * Math.PI * 2, state: 'PATROL', timer: 3 + id, target: null });
     }
     this.predators.length = this.settings.predators;
-    if (this.stations.length !== this.settings.stations) this.stations = Array.from({ length: this.settings.stations }, (_, i) => ({ x: 100 + (WIDTH - 200) * (i + .5) / this.settings.stations, y: 624, timer: 1.2 + i * 1.7 }));
+    if (this.stations.length !== this.settings.stations || this.stationRocks !== this.settings.rocks) {
+      const stations: Station[] = [];
+      for (let i = 0; i < this.settings.stations; i++) {
+        const preferred = 100 + (WIDTH - 200) * (i + .5) / this.settings.stations;
+        let best = 60, bestDistance = Infinity;
+        for (let x = 60; x <= WIDTH - 60; x += 4) {
+          if (this.activeRocks().some(r => distance({ x, y: 624 }, r) < r.r + 28) || stations.some(s => Math.abs(s.x - x) < 64)) continue;
+          if (Math.abs(x - preferred) < bestDistance) { best = x; bestDistance = Math.abs(x - preferred); }
+        }
+        stations.push({ x: best, y: 624, timer: this.stations[i]?.timer ?? 1.2 + i * 1.7 });
+      }
+      this.stations = stations; this.stationRocks = this.settings.rocks;
+    }
     while (this.fish.length < this.settings.fishCount) this.fish.push(this.spawnFish());
     this.fish.length = this.settings.fishCount;
     if (!this.fish.some(f => f.id === this.selected)) this.selected = null;
@@ -29,7 +42,7 @@ export class Aquarium {
   }
   reset() {
     this.fish = []; this.predators = []; this.food = []; this.stations = [];
-    this.time = 0; this.eaten = 0; this.selected = null; this.rng = random(481516);
+    this.time = 0; this.aiTime = 0; this.eaten = 0; this.selected = null; this.rng = random(481516);
     this.applySettings();
   }
   private spawnFish(): Fish {

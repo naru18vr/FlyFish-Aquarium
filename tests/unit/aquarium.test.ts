@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import data from '../../public/data/connectome.json';
 import { BrainModel } from '../../src/brain/model';
+import { isConnectome } from '../../src/brain/connectome';
 import { Aquarium, MAX_FOOD } from '../../src/simulation';
 import { BOUNDS, distance, safePosition, SpatialGrid } from '../../src/math';
 import { DEFAULTS, emptySense, type Connectome, type Quality } from '../../src/types';
 
 const connectome = data as unknown as Connectome;
 describe('measured neural circuit', () => {
+  it('rejects malformed sensory groups, corrupt edges and numeric root IDs', () => {
+    expect(isConnectome(data)).toBe(true);
+    expect(isConnectome({ ...data, neurons: [{ ...data.neurons[0], adapterGroup: 8 }] })).toBe(false);
+    expect(isConnectome({ ...data, neurons: [{ ...data.neurons[0], id: 123 }] })).toBe(false);
+    expect(isConnectome({ ...data, edges: [[0, 768, 5]] })).toBe(false);
+    expect(isConnectome({ ...data, edges: [[0, 1, -1]] })).toBe(false);
+    expect(isConnectome(null)).toBe(false);
+  });
   it('keeps large anatomical root IDs and real, positive synapse counts', () => {
     expect(new Set(data.neurons.map(n => n.id)).size).toBe(768);
     expect(data.edges.length).toBe(25274);
@@ -39,6 +48,23 @@ describe('measured neural circuit', () => {
   });
 });
 describe('aquarium interactions and safety', () => {
+  it.each([3, 13, 23])('resolves every point beside overlapping rocks and the floor at radius %s', radius => {
+    const sim = new Aquarium({ ...DEFAULTS });
+    for (let x = 750; x <= 930; x += 4) for (let y = 560; y <= 680; y += 4) {
+      const point = safePosition({ x, y }, sim.rocks, radius);
+      expect(point.y).toBeLessThanOrEqual(BOUNDS.bottom - radius);
+      expect(sim.rocks.every(r => distance(point, r) >= r.r + radius - .001)).toBe(true);
+    }
+  });
+  it('places every feeding station clear of rocks at every count', () => {
+    for (let stations = 1; stations <= 6; stations++) {
+      const sim = new Aquarium({ ...DEFAULTS, stations });
+      expect(sim.stations.every(s => sim.rocks.every(r => distance(s, r) >= r.r + 28))).toBe(true);
+      sim.settings.rocks = false; sim.applySettings();
+      sim.settings.rocks = true; sim.applySettings();
+      expect(sim.stations.every(s => sim.rocks.every(r => distance(s, r) >= r.r + 28))).toBe(true);
+    }
+  });
   it('starts with 24 fish and the specified environment', () => {
     const sim = new Aquarium({ ...DEFAULTS });
     expect(sim.fish).toHaveLength(24); expect(sim.predators).toHaveLength(1); expect(sim.stations).toHaveLength(2);

@@ -1,11 +1,15 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import type { Aquarium } from '../../src/simulation';
-declare global { interface Window { __aquarium: { sim: Aquarium; ready: boolean; workerMs: number; paused: boolean } } }
+declare global { interface Window { __aquarium: { sim: Aquarium; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
+const pageErrors = new WeakMap<Page, string[]>();
 
 test.beforeEach(async ({ page }) => {
+  const errors: string[] = []; pageErrors.set(page, errors);
+  page.on('pageerror', error => errors.push(error.message));
   await page.goto('/?debug');
   await page.waitForFunction(() => window.__aquarium?.ready);
 });
+test.afterEach(async ({ page }) => { expect(pageErrors.get(page)).toEqual([]); });
 test('starts live, changes counts and presets, pauses, and opens credits', async ({ page }, testInfo) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await expect(page.locator('#brain-status')).toContainText('512 neurons');
@@ -73,4 +77,79 @@ test('blocked connectome gives an explicit program fallback', async ({ page }) =
   await expect(page.locator('#brain-status')).toContainText('Program');
   await expect(page.locator('#metric-brain')).toHaveText('0%');
   await page.locator('[data-preset=".9"]').click(); await expect(page.locator('#metric-brain')).toHaveText('0%');
+});
+
+test('keyboard selection, stimulation, feeding and inspection are accessible', async ({ page }) => {
+  await page.locator('#pause').click();
+  const canvas = page.locator('#tank canvas');
+  await canvas.focus(); await canvas.press('ArrowRight');
+  await expect(page.locator('#inspector')).toBeVisible();
+  const selected = await page.evaluate(() => window.__aquarium.sim.selected);
+  await canvas.press('Enter');
+  expect(await page.evaluate(id => { const f = window.__aquarium.sim.fish.find(f => f.id === id)!; return Math.max(f.startleLeft, f.startleRight); }, selected)).toBeGreaterThan(0);
+  await canvas.press('ArrowRight');
+  expect(await page.evaluate(() => window.__aquarium.sim.selected)).not.toBe(selected);
+  await page.locator('#inspector-close').click(); await expect(canvas).toBeFocused();
+  await canvas.press('Space');
+  expect(await page.evaluate(() => window.__aquarium.sim.food.length)).toBe(5);
+  await page.locator('#inspect-mode').click(); await expect(page.locator('#inspect-mode')).toHaveAttribute('aria-pressed', 'true');
+  await canvas.focus(); await canvas.press('Escape'); await expect(page.locator('#inspect-mode')).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('right clicks do not feed and settings survive reload with bounded values', async ({ page }) => {
+  await page.locator('#pause').click();
+  const food = await page.evaluate(() => window.__aquarium.sim.food.length);
+  await page.locator('#tank canvas').click({ button: 'right' });
+  expect(await page.evaluate(() => window.__aquarium.sim.food.length)).toBe(food);
+  await page.evaluate(() => localStorage.setItem('flyfish-settings-v1', JSON.stringify({ fishCount: 900, predators: -1, stations: 99, flyWeight: .25, quality: 'invalid', bubbles: false })));
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  await expect(page.locator('#metric-fish')).toHaveText('40'); await expect(page.locator('#metric-brain')).toHaveText('25%');
+  expect(await page.evaluate(() => window.__aquarium.sim.settings)).toMatchObject({ fishCount: 40, predators: 0, stations: 6, quality: 'medium', bubbles: false });
+  await page.evaluate(() => localStorage.setItem('flyfish-settings-v1', 'null'));
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  await expect(page.locator('#metric-fish')).toHaveText('24'); await expect(page.locator('#metric-brain')).toHaveText('70%');
+});
+
+test('rapid quality changes and reset keep the final neural configuration', async ({ page }) => {
+  await page.locator('summary').click();
+  await page.evaluate(() => {
+    const quality = document.querySelector<HTMLSelectElement>('#quality')!;
+    for (const value of ['high', 'low', 'high', 'medium']) { quality.value = value; quality.dispatchEvent(new Event('input', { bubbles: true })); }
+    document.querySelector<HTMLButtonElement>('#reset')!.click();
+  });
+  await expect(page.locator('#brain-status')).toContainText('512 neurons');
+  await page.waitForFunction(() => window.__aquarium.ready && window.__aquarium.sim.fish.some(f => f.spikes > 0));
+  await expect(page.locator('#quality')).toHaveValue('medium');
+  await expect(page.locator('#inspector')).not.toBeVisible();
+});
+
+test('unresponsive Worker recovers instead of waiting forever', async ({ page }) => {
+  await page.route('**/assets/worker-*.js', route => route.fulfill({ contentType: 'text/javascript', body: 'self.onmessage = () => {};' }));
+  await page.reload();
+  await expect(page.locator('#brain-status')).toContainText('Program', { timeout: 22_000 });
+  await expect(page.locator('#metric-brain')).toHaveText('0%');
+  expect(await page.evaluate(() => window.__aquarium.brainFailed)).toBe(true);
+  const before = await page.evaluate(() => window.__aquarium.sim.time);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__aquarium.sim.time)).toBeGreaterThan(before);
+});
+
+test('corrupt connection data cannot silently masquerade as a working brain', async ({ page }) => {
+  await page.route('**/data/connectome.json', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ neurons: [{ id: '1', nt: 'ACH', adapterGroup: 9 }], edges: [[0, 0, 5]] }) }));
+  await page.reload();
+  await expect(page.locator('#brain-status')).toContainText('Program');
+  await expect(page.locator('#metric-brain')).toHaveText('0%');
+});
+
+test('narrow and landscape screens keep controls inside the viewport', async ({ page }) => {
+  for (const viewport of [{ width: 320, height: 640 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(viewport);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.locator('#about-open').click(); await expect(page.locator('#about')).toBeVisible();
+    const dialog = (await page.locator('#about').boundingBox())!;
+    expect(dialog.x).toBeGreaterThanOrEqual(0); expect(dialog.x + dialog.width).toBeLessThanOrEqual(viewport.width);
+    await page.locator('#about-close').click();
+  }
+  await page.locator('#settings-toggle').click(); await expect(page.locator('#settings-panel')).not.toBeVisible();
+  await page.locator('#settings-toggle').click(); await expect(page.locator('#settings-panel')).toBeVisible();
 });

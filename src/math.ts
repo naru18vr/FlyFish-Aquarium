@@ -42,5 +42,36 @@ export function safePosition(point: Point, rocks: Rock[], radius = 13): { x: num
       y = rock.y + (d > .001 ? dy / d : -1) * (min + .1);
     }
   }
-  return { x: clamp(x, BOUNDS.left + radius, BOUNDS.right - radius), y: clamp(y, BOUNDS.top + radius, BOUNDS.bottom - radius), touched };
+  x = clamp(x, BOUNDS.left + radius, BOUNDS.right - radius);
+  y = clamp(y, BOUNDS.top + radius, BOUNDS.bottom - radius);
+  const valid = (p: Point) => p.x >= BOUNDS.left + radius && p.x <= BOUNDS.right - radius && p.y >= BOUNDS.top + radius && p.y <= BOUNDS.bottom - radius && rocks.every(r => distance(p, r) >= r.r + radius - .00001);
+  if (valid({ x, y })) return { x, y, touched };
+  // A final wall clamp can undo a circular projection. Resolve that corner
+  // against the intersections of the expanded rocks and tank boundaries.
+  const target = { x: clamp(point.x, BOUNDS.left + radius, BOUNDS.right - radius), y: clamp(point.y, BOUNDS.top + radius, BOUNDS.bottom - radius) };
+  const candidates: Point[] = [];
+  const xs = [BOUNDS.left + radius, BOUNDS.right - radius], ys = [BOUNDS.top + radius, BOUNDS.bottom - radius];
+  for (const cx of xs) for (const cy of ys) candidates.push({ x: cx, y: cy });
+  for (const rock of rocks) {
+    const r = rock.r + radius + .01;
+    for (const cy of ys) {
+      const squared = r * r - (cy - rock.y) ** 2;
+      if (squared >= 0) for (const sign of [-1, 1]) candidates.push({ x: rock.x + sign * Math.sqrt(squared), y: cy });
+    }
+    for (const cx of xs) {
+      const squared = r * r - (cx - rock.x) ** 2;
+      if (squared >= 0) for (const sign of [-1, 1]) candidates.push({ x: cx, y: rock.y + sign * Math.sqrt(squared) });
+    }
+    for (const angle of [Math.atan2(target.y - rock.y, target.x - rock.x), 0, Math.PI / 2, Math.PI, -Math.PI / 2]) candidates.push({ x: rock.x + Math.cos(angle) * r, y: rock.y + Math.sin(angle) * r });
+    for (const other of rocks) {
+      if (other === rock) continue;
+      const d = distance(rock, other), q = other.r + radius + .01;
+      if (d === 0 || d > r + q || d < Math.abs(r - q)) continue;
+      const a = (r * r - q * q + d * d) / (2 * d), h = Math.sqrt(Math.max(0, r * r - a * a));
+      const dx = (other.x - rock.x) / d, dy = (other.y - rock.y) / d;
+      for (const sign of [-1, 1]) candidates.push({ x: rock.x + a * dx - sign * h * dy, y: rock.y + a * dy + sign * h * dx });
+    }
+  }
+  const safe = candidates.filter(valid).sort((a, b) => distance(a, target) - distance(b, target))[0];
+  return { ...(safe ?? target), touched: true };
 }

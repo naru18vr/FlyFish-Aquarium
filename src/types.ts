@@ -45,10 +45,10 @@ export interface Connectome {
   edges: [number, number, number][];
 }
 export type BrainRequest =
-  | { type: 'init'; data: Connectome; quality: Quality }
-  | { type: 'quality'; quality: Quality }
-  | { type: 'reset' }
-  | { type: 'tick'; fish: { id: number; sensory: Sensory; noise: number }[] };
+  | { type: 'init'; revision: number; data: Connectome; quality: Quality }
+  | { type: 'quality'; revision: number; quality: Quality }
+  | { type: 'reset'; revision: number }
+  | { type: 'tick'; revision: number; fish: { id: number; sensory: Sensory; noise: number }[] };
 export type BrainResponse =
-  | { type: 'ready'; neurons: number; edges: number }
-  | { type: 'result'; elapsed: number; fish: { id: number; motor: Motor; activity: number[]; spikes: number }[] };
+  | { type: 'ready'; revision: number; neurons: number; edges: number }
+  | { type: 'result'; revision: number; elapsed: number; fish: { id: number; motor: Motor; activity: number[]; spikes: number }[] };

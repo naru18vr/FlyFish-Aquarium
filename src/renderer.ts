@@ -48,6 +48,8 @@ export class AquariumRenderer {
     host.prepend(this.app.canvas);
     this.app.canvas.setAttribute('aria-label', '泳ぐ魚の水槽。空間をクリックで餌、魚をクリックで刺激。Shift＋クリックで個体情報。');
     this.app.canvas.setAttribute('role', 'img');
+    this.app.canvas.tabIndex = 0;
+    this.app.canvas.setAttribute('aria-describedby', 'keyboard-help');
     this.textures = palettes.map(palette => [fishTexture(palette, 0), fishTexture(palette, 1), fishTexture(palette, 0, true)]);
     this.app.stage.addChild(this.background, this.plants, this.scenery, this.creatures, this.foreground);
     this.foreground.addChild(this.food, this.bubbles, this.selection, this.ripples);
