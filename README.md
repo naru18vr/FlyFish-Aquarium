@@ -1,0 +1,100 @@
+# FlyFish Aquarium
+
+小さな水槽、大きな好奇心。ショウジョウバエの公開コネクトーム由来の神経回路とプログラムAIをブレンドし、かわいいドット絵の魚のふるまいを観察する静的Webアプリです。
+
+公開先：**https://naru18vr.github.io/FlyFish-Aquarium/** （GitHub Pagesを有効化し、公開ワークフロー成功後に利用できます）
+
+## 遊び方
+
+- 空いている場所をクリック / タップ：水面から餌を落とす。
+- 魚をクリック / タップ：左右の刺激を感覚入力へ渡す。近くの魚にも弱く伝わります。
+- Shift＋魚クリック、または「脳をのぞく」を選んで魚をタップ：個体情報・感覚・運動・脳活動を見る。
+- 右上の設定：魚数12〜40（30匹可）、Fly Brain比率0〜100%、敵0〜8、餌場0〜6を即時変更。
+- Fly Brain / Hybrid / Programプリセット：90 / 50 / 0%。初回起動は指定どおり70%。
+- 詳細設定：個体差、クリック反応、刺激・伝播強度、海藻・岩・泡、Brain Quality、開発ログ。
+- 水槽右上：一時停止・再開、リセット、全画面。設定はこのブラウザーに保存されます。
+
+初期状態は魚24匹、敵1匹、餌場2個、Fly Brain70% / Program30%、Medium10Hz。敵は魚を殺しません。餌場は自動で餌を出すため、操作しなくても魚たちが泳ぎ、集まり、逃げます。
+
+## 起動・検証
+
+Node.js 22.12以上を使用してください。
+
+```sh
+npm ci
+npm run dev
+```
+
+```sh
+npm test
+npm run build
+npx playwright install chromium
+npm run test:e2e
+```
+
+ビルド結果は `dist/`。`npm run preview` で確認できます。ES modulesとWorkerを使うため、HTMLの直接ダブルクリックではなくHTTPで開いてください。
+
+## GitHub Pages
+
+1. リポジトリの **Settings → Pages → Build and deployment → Source → GitHub Actions** を選択。
+2. `main`へのpush、または **Actions → Deploy FlyFish Aquarium to GitHub Pages → Run workflow** で公開。
+3. 公開先： https://naru18vr.github.io/FlyFish-Aquarium/
+
+`.github/workflows/pages.yml`が型チェック、単体テスト、ビルド、Pagesへの配信を実行します。初回のPages有効化はリポジトリ管理設定が必要な場合があります。`.github/workflows/checks.yml`は別途、デスクトップ・モバイルのブラウザー操作を検証し、スクリーンショットとレポートを`browser-checks` artifactとして保存します。
+
+Viteの`base: './'`により、プロジェクト名以下のURLでもWorkerとJSONを正しく取得します。バックエンド・アカウント・実行時の研究APIは不要です。Google Fontsは任意の表示用通信で、取得できなくてもシステムフォントで動作します。
+
+## 「ハエ脳」の意味
+
+このアプリは **FlyWire FAFB v630** の実測接続データを使います。データは[原研究のMurthy Lab公開リポジトリ](https://github.com/murthylab/flywire-network-analysis/tree/ee4944c03429edf857a6b10bcf98bea7dcef35b8/v630_data)から取得し、中央複合体（CX）と一部の下行ニューロン（DNa01 / DNa02）を抽出しました。最大768ニューロン・25,274接続で、架空の接続を生成していません。
+
+**全脳シミュレーションや、検証されたハエ／魚の行動再現ではありません。** 感覚入力をどのニューロンへ投射するか、活動を魚の左右旋回・加速・制動へどう読み出すかは人工的なアダプターです。切り出された回路、正規化した重み、簡略化した伝達物質の符号、軽量LIFモデルを使います。比率を変えて観察できる教育・創作向けのモデルです。
+
+接続構造は全魚で共有しますが、膜電位、不応期、発火、活動の履歴、乱数状態は魚ごとに独立です。神経活動はメインスレッドでは計算しません。
+
+| 品質 | ニューロン | Worker更新 |
+|---|---:|---:|
+| Low | 256 | 5Hz |
+| Medium | 512 | 10Hz |
+| High | 768 | 15Hz |
+
+各更新は5msのLIFサブステップで進み、どの品質でも同じ実時間をシミュレーションします。負荷が高い場合はLowへ切り替えてください。描画・物理はrequestAnimationFrame、通常AIは20Hz、神経入力は魚をまとめてWorkerへ送信し、応答待ち中の重複送信を避けます。Spatial Gridで餌・仲間・敵の近傍探索を行います。目標は60fpsですが、端末・ブラウザー・品質設定によって変わります。
+
+## 構成
+
+```text
+src/main.ts              初期化、設定保存、Worker通信、更新時計
+src/simulation.ts        魚、敵、餌、餌場、感覚、Program AI
+src/math.ts              Spatial Grid、数値制限、衝突安全層
+src/renderer.ts          PixiJS描画、オリジナルドット絵
+src/ui.ts / style.css    設定、操作ガイド、個体情報、データ出典
+src/brain/model.ts       LIF、独立した個体の脳状態、人工アダプター
+src/brain/worker.ts      バッチ神経計算（Worker内のみ）
+public/data/             静的な実データ由来コネクトーム
+scripts/                 再現可能なデータ抽出
+tests/                   神経応答、衝突、餌、操作、モバイル検証
+```
+
+100% Fly Brain時にも、数値制限、水槽境界、岩からの押し出し、移動量の制限を常時適用します。クリック処理は魚の位置を直接変えず、左右のstartle入力を増やします。接続データ取得・Worker起動に失敗した場合は理由を表示してProgramへ切り替え、再読み込みまで神経比率を上げられなくします。
+
+開発時はURLに`?debug`を付けると読み取り用診断ハンドル`window.__aquarium`を公開します。個体パネルのログは設定からオンにできます。
+
+## データを再抽出する
+
+Python 3の標準ライブラリのみで再現できます。元データは約30MB、最初の実行のみダウンロードします。
+
+```sh
+python scripts/extract_connectome.py --cache .cache/flywire
+```
+
+元データのGit commitとSHA-256、抽出規則をJSON内に記録しています。Root IDはJavaScriptの整数精度で壊さないよう文字列のまま保存します。品質ごとの回路は同じ選定順の256 / 512 / 768ニューロンを使う誘導部分グラフです。
+
+## 出典・ライセンス
+
+- データ・派生JSON：**CC BY-NC 4.0（非商用）**。[DATA_LICENSE.md](DATA_LICENSE.md)および[FlyWire公式ガイドライン](https://join.flywire.ai/guidelines)。
+- 独自のアプリコード・ドット絵：**MIT**。[LICENSE](LICENSE)。データのライセンスとは別です。
+- ライブラリ・フォント：[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+- Dorkenwald et al. (2024), *Neuronal wiring diagram of an adult brain*. https://doi.org/10.1038/s41586-024-07558-y
+- Lin et al. (2024), *Network statistics of the whole-brain connectome of Drosophila*. https://doi.org/10.1038/s41586-024-07968-y
+
+アプリ内の「データ出典とライセンス」からも確認できます。商用利用時は、コードのMIT許諾に加えて、FlyWireデータについて別途許諾を確認してください。
