@@ -48,6 +48,9 @@ test('clicks use sensory stimuli, nearby fish react, and empty clicks feed from 
   await canvas.click({ position: { x: box.width * 300 / 1200, y: box.height * 300 / 720 } });
   await expect(page.locator('#inspector')).toBeVisible();
   await expect(page.locator('#inspector')).toContainText('BRAIN ACTIVITY');
+  const closeHandle = await page.locator('#inspector-close').elementHandle();
+  await page.waitForTimeout(450);
+  expect(await closeHandle!.evaluate(element => element.isConnected)).toBe(true);
   await page.locator('#inspector-close').click(); await expect(page.locator('#inspector')).not.toBeVisible();
 });
 test('pure brain and maximum settings remain stable; quality updates the Worker', async ({ page }) => {
