@@ -48,7 +48,6 @@ export class AquariumAudio {
   private voices = new Set<Voice>(); private timer = 0; private step = 0; private next = 0; private origin = 0;
   private paused = false; private hidden = false; private unlocked = false; private unavailable = false;
   private musicNotes = 0; private effectsPlayed = 0; private lastMidi = 0; private lastDelay = 0;
-  private lastTap = -Infinity;
   constructor(public settings: AudioSettings) {}
   get snapshot(): AudioSnapshot {
     let level = 0;
@@ -150,7 +149,10 @@ export class AquariumAudio {
     if (!c || c.state !== 'running' || !this.settings.enabled || !this.settings.bgm || this.paused || this.hidden) return;
     const song = TRACKS[this.settings.track], duration = 60 / song.bpm / 4;
     // Recover from a stalled foreground without playing a burst of missed notes.
-    if (this.next < c.currentTime - duration) { this.next = this.origin = c.currentTime + .025; this.step = 0; }
+    if (this.next < c.currentTime) {
+      const missed = Math.ceil((c.currentTime + .006 - this.next) / duration);
+      this.step += missed; this.next += missed * duration;
+    }
     while (this.next < c.currentTime + .14) {
       const step = this.step % 64, bar = Math.floor(step / 16), beat = step % 16, t = this.next;
       const degree = song.melody[step];
@@ -173,8 +175,6 @@ export class AquariumAudio {
     if (!this.settings.enabled || !this.settings.effects || this.hidden) return null;
     if (!await this.activate() || !this.context || !this.settings.effects) return null;
     const now = this.context.currentTime;
-    if (now - this.lastTap < .025) return null;
-    this.lastTap = now;
     const midi = fishNote(this.settings.track, id), song = TRACKS[this.settings.track];
     const when = tapTime(now, this.origin, song.bpm, this.settings.sync && !!this.timer);
     const timbre = this.settings.timbre;

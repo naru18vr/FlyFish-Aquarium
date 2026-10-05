@@ -80,9 +80,16 @@ test('fish taps stay musical in aquarium mode and rapid toggles do not accumulat
   expect(await page.evaluate(() => window.__aquarium.audio.lastMidi)).toBe(72);
   await canvas.click({ position: { x: box.width * .65, y: box.height * .2 } });
   await expect.poll(() => page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(2);
+  await canvas.focus(); await canvas.press('ArrowRight');
+  await page.evaluate(() => {
+    const canvas = document.querySelector('#tank canvas')!;
+    for (let i = 0; i < 2; i++) canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  });
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(4);
+  await page.locator('#inspector-close').click();
   await page.locator('#tank-sound').click();
   await canvas.click({ position: { x: box.width * .3, y: box.height * .3 } });
-  expect(await page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(2);
+  expect(await page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(4);
   for (let i = 0; i < 4; i++) {
     await page.locator('#tank-sound').click(); await expect.poll(() => page.evaluate(() => window.__aquarium.audio.unlocked)).toBe(true);
     await page.locator('#tank-feed').click(); await page.locator('#tank-sound').click();
