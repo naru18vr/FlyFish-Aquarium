@@ -31,7 +31,7 @@ export class AquariumRenderer {
   private textures = new Map<FishSpecies, Texture[][]>(); private predatorTextures = new Map<PredatorKind, Texture>();
   private plantSprites: { graphics: Graphics; x: number; phase: number }[] = [];
   private bubblePoints: { x: number; y: number; speed: number; r: number; phase: number }[] = [];
-  private ripple: (Point & { age: number; kind: string })[] = [];
+  private ripple: (Point & { age: number; kind: string; midi?: number })[] = [];
   private settingsKey = '';
   private initialized = false;
   async init(host: HTMLElement) {
@@ -137,8 +137,8 @@ export class AquariumRenderer {
       station.scale.set(scale); station.position.set(s.x, HEIGHT - 70 - 650 * scale); this.scenery.addChild(station);
     }
   }
-  effect(point: Point, kind: string) { this.ripple.push({ ...point, age: 0, kind }); }
-  render(sim: Aquarium, dt: number) {
+  effect(point: Point, kind: string, midi?: number) { this.ripple.push({ ...point, age: 0, kind, midi }); if (this.ripple.length > 40) this.ripple.shift(); }
+  render(sim: Aquarium, dt: number, effectDt = dt) {
     const key = `${sim.settings.rocks}/${sim.settings.stations}`;
     if (key !== this.settingsKey) { this.drawScenery(sim); this.settingsKey = key; }
     this.plants.visible = sim.settings.seaweed;
@@ -176,7 +176,15 @@ export class AquariumRenderer {
     }
     this.ripples.clear();
     for (const ripple of this.ripple) {
-      ripple.age += dt;
+      ripple.age += ripple.kind === 'note' ? effectDt : dt;
+      if (ripple.kind === 'note') {
+        const x = ripple.x, y = ripple.y - 24 - ripple.age * 55, alpha = Math.max(0, .9 - ripple.age);
+        const color = ['#ffd78d', '#b2ead0', '#ded0f2', '#ffc5ac', '#fff4ce'][(ripple.midi ?? 0) % 5];
+        this.ripples.rect(x - 5, y, 9, 6).fill({ color, alpha });
+        this.ripples.rect(x + 1, y - 17, 3, 21).fill({ color, alpha });
+        this.ripples.rect(x + 4, y - 17, 9, 4).fill({ color, alpha });
+        continue;
+      }
       this.ripples.circle(ripple.x, ripple.kind === 'feed' ? 40 : ripple.y, 12 + ripple.age * 65).stroke({ color: ripple.kind === 'scare' ? '#f5c88d' : '#d2e5ae', alpha: Math.max(0, .6 - ripple.age * .6), width: 2 });
     }
     this.ripple = this.ripple.filter(r => r.age < 1);

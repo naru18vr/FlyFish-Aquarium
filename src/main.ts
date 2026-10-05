@@ -6,6 +6,7 @@ import { isConnectome } from './brain/connectome';
 import { FISH_SPECIES, PREDATOR_KINDS, type FishSelection, type PredatorSelection } from './species';
 import { BASE_HEIGHT, BASE_WIDTH, BOUNDS, clamp, HEIGHT, tankSize, WIDTH } from './math';
 import { DEFAULTS, QUALITY, idleMotor, type BrainRequest, type BrainResponse, type Settings } from './types';
+import { AquariumAudio, readAudioSettings, type AudioSettings } from './audio';
 
 // Preserve only recognized, bounded values. Storage may be unavailable in private mode.
 function loadSettings(): Settings {
@@ -27,7 +28,34 @@ function loadSettings(): Settings {
   return settings;
 }
 const settings = loadSettings();
-const ui = new UI(settings), sim = new Aquarium(settings), renderer = new AquariumRenderer();
+let savedAudio: unknown;
+try { savedAudio = JSON.parse(localStorage.getItem('flyfish-sound-v1') || 'null'); } catch { /* Optional storage. */ }
+const sound = new AquariumAudio(readAudioSettings(savedAudio));
+const ui = new UI(settings, sound.settings), sim = new Aquarium(settings), renderer = new AquariumRenderer();
+sound.onChange = () => ui.soundState(sound.snapshot);
+ui.soundState(sound.snapshot);
+function saveSound() { try { localStorage.setItem('flyfish-sound-v1', JSON.stringify(sound.settings)); } catch { /* Optional persistence. */ } }
+ui.onSoundSetting = (key, value) => {
+  sound.change(key, value as AudioSettings[typeof key]); saveSound();
+  if (sound.settings.enabled) void sound.activate();
+};
+ui.onSoundToggle = () => {
+  const state = sound.snapshot;
+  if (!state.enabled || state.unlocked || state.unavailable) sound.change('enabled', !state.enabled);
+  saveSound();
+  if (sound.settings.enabled) void sound.activate();
+};
+ui.onSoundPreview = () => {
+  sound.change('enabled', true); sound.change('effects', true); saveSound();
+  void sound.fish(3).then(note => { if (note) renderer.effect({ x: WIDTH / 2, y: HEIGHT / 2 }, 'note', note.midi); });
+};
+document.addEventListener('visibilitychange', () => sound.visibility(document.hidden));
+window.addEventListener('pagehide', () => sound.visibility(true));
+window.addEventListener('pageshow', () => sound.visibility(document.hidden));
+const playFish = (id: number, point: { x: number; y: number }) => {
+  const position = { ...point };
+  void sound.fish(id, point.x / WIDTH * 1.4 - .7).then(note => { if (note) renderer.effect(position, 'note', note.midi); });
+};
 let paused = false, inspecting = false, ready = false, busy = false, workerMs = 0, brainTime = 0;
 let worker: Worker | null = null, brainFailed = false;
 let revision = 0, workerTimer = 0;
@@ -55,9 +83,9 @@ ui.onSetting = (key, value) => {
   try { localStorage.setItem('flyfish-settings-v1', JSON.stringify(settings)); } catch { /* Optional persistence. */ }
   if (key === 'quality') { restartBrain(); send({ type: 'quality', revision, quality: settings.quality }); }
 };
-ui.onPause = () => { paused = !paused; ui.pause(paused); };
+ui.onPause = () => { paused = !paused; ui.pause(paused); sound.pause(paused); };
 ui.onReset = () => { sim.reset(); restartBrain(); send({ type: 'reset', revision }); ui.inspector(undefined, 0); ui.toast('新しいひと泳ぎ、はじまり。'); };
-ui.onFeed = () => { sim.feed(WIDTH * (.3 + Math.random() * .4)); ui.toast('餌をひとつまみ。集まってくるかな？'); };
+ui.onFeed = () => { sim.feed(WIDTH * (.3 + Math.random() * .4)); void sound.feed(); ui.toast('餌をひとつまみ。集まってくるかな？'); };
 ui.onInspect = () => { inspecting = !inspecting; ui.inspecting(inspecting); if (inspecting) ui.toast('気になる魚をタップして、脳をのぞこう'); };
 ui.onCloseInspector = () => { sim.selected = null; ui.inspector(undefined, 0); };
 function syncTankSize() {
@@ -111,9 +139,11 @@ async function start() {
     const rect = renderer.app.canvas.getBoundingClientRect();
     const point = { x: (event.clientX - rect.left) / rect.width * WIDTH, y: (event.clientY - rect.top) / rect.height * HEIGHT };
     if (point.x < 0 || point.x > WIDTH || point.y < BOUNDS.top || point.y > BOUNDS.bottom + 30) return;
+    const tapped = sim.pick(point);
+    if (tapped && !event.shiftKey && !inspecting) playFish(tapped.id, point);
     const action = sim.interact(point, event.shiftKey || inspecting);
     if (action === 'scare') { renderer.effect(point, action); ui.toast('びっくり！ 刺激が神経回路へ伝わりました'); }
-    else if (action === 'feed') { renderer.effect(point, action); ui.toast('餌がゆっくり沈んでいきます'); }
+    else if (action === 'feed') { renderer.effect(point, action); void sound.feed(); ui.toast('餌がゆっくり沈んでいきます'); }
     ui.inspector(sim.fish.find(f => f.id === sim.selected), workerMs);
   });
   renderer.app.canvas.addEventListener('keydown', event => {
@@ -127,6 +157,7 @@ async function start() {
       event.preventDefault();
       const fish = sim.fish.find(f => f.id === sim.selected);
       if (fish && !inspecting) {
+        playFish(fish.id, fish);
         const action = sim.interact(fish); if (action === 'scare') { renderer.effect(fish, action); ui.toast('びっくり！ 刺激が神経回路へ伝わりました'); }
       } else if (!fish) ui.onFeed();
     } else if (event.key === 'Escape') {
@@ -147,7 +178,7 @@ async function start() {
       }
     } else accumulator = 0;
     pausedRenderTime += elapsed;
-    if (!document.hidden && (!paused || pausedRenderTime >= .2)) { renderer.render(sim, paused ? 0 : dt); pausedRenderTime = 0; frames++; }
+    if (!document.hidden && (!paused || pausedRenderTime >= .2)) { renderer.render(sim, paused ? 0 : dt, Math.min(pausedRenderTime, .25)); pausedRenderTime = 0; frames++; }
     uiTime += dt; fpsTime += elapsed;
     if (uiTime >= .2) { uiTime = 0; ui.inspector(sim.fish.find(f => f.id === sim.selected), workerMs); }
     if (fpsTime >= 1) { document.querySelector('#fps')!.textContent = String(Math.round(frames / fpsTime)); frames = 0; fpsTime = 0; }
@@ -156,7 +187,7 @@ async function start() {
   requestAnimationFrame(frame);
   // Read-only diagnostics are opt-in and never run neural computation on main.
   if (new URLSearchParams(location.search).has('debug')) {
-    Object.defineProperty(window, '__aquarium', { value: { sim, get width() { return WIDTH; }, get height() { return HEIGHT; }, get ready() { return ready; }, get workerMs() { return workerMs; }, get paused() { return paused; }, get brainFailed() { return brainFailed; } } });
+    Object.defineProperty(window, '__aquarium', { value: { sim, get audio() { return sound.snapshot; }, get width() { return WIDTH; }, get height() { return HEIGHT; }, get ready() { return ready; }, get workerMs() { return workerMs; }, get paused() { return paused; }, get brainFailed() { return brainFailed; } } });
     (document.querySelector('#debug-toggle') as HTMLInputElement).checked = true;
   }
   if (new URLSearchParams(location.search).has('tank')) ui.tankMode(true);

@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { AudioSnapshot } from '../../src/audio';
 import type { Aquarium } from '../../src/simulation';
 import { FISH_PROFILES, FISH_SPECIES, PREDATOR_KINDS } from '../../src/species';
-declare global { interface Window { __aquarium: { sim: Aquarium; width: number; height: number; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
+declare global { interface Window { __aquarium: { sim: Aquarium; audio: AudioSnapshot; width: number; height: number; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
 const pageErrors = new WeakMap<Page, string[]>();
 
 test.beforeEach(async ({ page }) => {
@@ -11,6 +12,98 @@ test.beforeEach(async ({ page }) => {
   await page.waitForFunction(() => window.__aquarium?.ready);
 });
 test.afterEach(async ({ page }) => { expect(pageErrors.get(page)).toEqual([]); });
+
+test('original BGM and fish notes play, change sound, mute independently and restore safely', async ({ page }, testInfo) => {
+  expect(await page.evaluate(() => window.__aquarium.audio.contextState)).toBe('not-created');
+  await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await page.locator('#sound-toggle').click();
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.unlocked)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.musicNotes)).toBeGreaterThan(0);
+  for (const [track, root] of [['sunshine', 72], ['bubbles', 77], ['arcade', 74]] as const) {
+    await page.locator('#sound-track').selectOption(track);
+    await expect.poll(() => page.evaluate(() => window.__aquarium.audio.level)).toBeGreaterThan(.0005);
+    expect(await page.evaluate(() => window.__aquarium.audio.level)).toBeLessThan(.3);
+    await page.locator('#tank canvas').focus(); await page.locator('#tank canvas').press('ArrowRight');
+    const selected = await page.evaluate(() => window.__aquarium.sim.selected!);
+    const effects = await page.evaluate(() => window.__aquarium.audio.effectsPlayed);
+    await page.locator('#tank canvas').press('Enter');
+    await expect.poll(() => page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(effects + 1);
+    const midi = await page.evaluate(() => window.__aquarium.audio.lastMidi);
+    expect([0,2,4,7,9]).toContain((midi - root) % 12);
+    expect(selected).toBeGreaterThan(0); expect(await page.evaluate(() => window.__aquarium.audio.lastDelay)).toBeLessThanOrEqual(.076);
+  }
+  await page.locator('#pause').click();
+  expect(await page.evaluate(() => window.__aquarium.audio.playing)).toBe(false);
+  for (const timbre of ['chip', 'pluck', 'sparkle']) {
+    await page.locator('#sound-timbre').selectOption(timbre);
+    const effects = await page.evaluate(() => window.__aquarium.audio.effectsPlayed);
+    await page.locator('#tank canvas').focus(); await page.locator('#tank canvas').press('Enter');
+    await expect.poll(() => page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(effects + 1);
+  }
+  await page.locator('[data-audio="effects"]').uncheck();
+  const effects = await page.evaluate(() => window.__aquarium.audio.effectsPlayed);
+  await page.locator('#tank canvas').focus(); await page.locator('#tank canvas').press('Enter');
+  await page.waitForTimeout(100); expect(await page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(effects);
+  await page.locator('[data-audio="bgm"]').uncheck(); await page.locator('#pause').click();
+  expect(await page.evaluate(() => window.__aquarium.audio.playing)).toBe(false);
+  await page.locator('[data-audio="bgm"]').check();
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.playing)).toBe(true);
+  await page.locator('#sound-volume').evaluate((input: HTMLInputElement) => { input.value = '0'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.level)).toBeLessThan(.0001);
+  await page.locator('#sound-volume').evaluate((input: HTMLInputElement) => { input.value = '40'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.locator('#sound-preview').click();
+  await page.screenshot({ path: testInfo.outputPath('sound-controls.png'), fullPage: true });
+  await page.locator('#tank-open').click(); await page.locator('#tank-sound').click();
+  await expect(page.locator('#tank-sound')).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.contextState)).toBe('suspended');
+  await page.locator('#tank-sound').click(); await expect(page.locator('#tank-sound')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#tank-exit').click();
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  await expect(page.locator('#sound-track')).toHaveValue('arcade'); await expect(page.locator('#sound-timbre')).toHaveValue('sparkle');
+  expect(await page.evaluate(() => window.__aquarium.audio.contextState)).toBe('not-created');
+  await expect(page.locator('#sound-toggle')).toContainText('音をはじめる');
+  await page.locator('#sound-toggle').click(); await expect.poll(() => page.evaluate(() => window.__aquarium.audio.playing)).toBe(true);
+  await page.locator('#settings-reset').click(); await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('fish taps stay musical in aquarium mode and rapid toggles do not accumulate voices', async ({ page }) => {
+  await page.locator('#pause').click(); await page.locator('#tank-open').click();
+  await page.locator('#tank-sound').click(); await expect.poll(() => page.evaluate(() => window.__aquarium.audio.unlocked)).toBe(true);
+  await page.evaluate(() => {
+    const a = window.__aquarium;
+    a.sim.fish.forEach(f => { f.x = a.width * .8; f.y = a.height * .5; });
+    Object.assign(a.sim.fish[0], { x: a.width * .3, y: a.height * .3 });
+  });
+  const canvas = page.locator('#tank canvas'), box = (await canvas.boundingBox())!;
+  await canvas.click({ position: { x: box.width * .3, y: box.height * .3 } });
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(1);
+  expect(await page.evaluate(() => window.__aquarium.audio.lastMidi)).toBe(72);
+  await canvas.click({ position: { x: box.width * .65, y: box.height * .2 } });
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(2);
+  await page.locator('#tank-sound').click();
+  await canvas.click({ position: { x: box.width * .3, y: box.height * .3 } });
+  expect(await page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(2);
+  for (let i = 0; i < 4; i++) {
+    await page.locator('#tank-sound').click(); await expect.poll(() => page.evaluate(() => window.__aquarium.audio.unlocked)).toBe(true);
+    await page.locator('#tank-feed').click(); await page.locator('#tank-sound').click();
+  }
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.contextState)).toBe('suspended');
+  expect(await page.evaluate(() => window.__aquarium.audio.voices)).toBeLessThan(64);
+  await page.locator('#tank-sound').click(); await page.locator('#tank-pause').click();
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.playing)).toBe(true);
+});
+
+test('unavailable audio keeps the aquarium usable and sound can be switched off', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'AudioContext', { value: undefined, configurable: true });
+    Object.defineProperty(window, 'webkitAudioContext', { value: undefined, configurable: true });
+  });
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  await page.locator('#sound-toggle').click(); await expect(page.locator('#sound-status')).toContainText('音を再生できません');
+  expect(await page.evaluate(() => window.__aquarium.audio.unavailable)).toBe(true);
+  await page.locator('#sound-toggle').click(); expect(await page.evaluate(() => window.__aquarium.audio.enabled)).toBe(false);
+  await page.locator('#feed-button').click(); expect(await page.evaluate(() => window.__aquarium.sim.food.length)).toBeGreaterThanOrEqual(5);
+});
 
 async function expectFilledTank(page: Page) {
   await expect(page.locator('body')).toHaveClass('tank-view');

@@ -22,6 +22,11 @@ test('published aquarium loads its neural Worker and supports interaction', asyn
   await expect(page.locator('#inspector')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('published-aquarium.png'), fullPage: true });
   await page.locator('#tank-open').click();
+  await page.locator('#tank-sound').click();
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.unlocked)).toBe(true);
+  await page.locator('#tank canvas').focus(); await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('Enter');
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBeGreaterThan(0);
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.level)).toBeGreaterThan(.0001);
   await expect(page.locator('body')).toHaveClass('tank-view');
   await expect.poll(() => page.evaluate(() => {
     const r = document.querySelector('canvas')!.getBoundingClientRect();
@@ -30,6 +35,12 @@ test('published aquarium loads its neural Worker and supports interaction', asyn
   await page.locator('#tank-feed').click(); await page.waitForTimeout(250);
   await page.screenshot({ path: testInfo.outputPath('published-tank-mode.png') });
   await page.locator('#tank-exit').click(); await expect(page.locator('#tank-open')).toBeVisible();
+  await page.locator('#pause').click();
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.playing)).toBe(true);
+  await page.locator('#sound-track').selectOption('bubbles'); await page.locator('#sound-timbre').selectOption('pluck');
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.level)).toBeGreaterThan(.0005);
+  await page.screenshot({ path: testInfo.outputPath('published-sound-controls.png'), fullPage: true });
+  await page.locator('#sound-toggle').click(); await expect.poll(() => page.evaluate(() => window.__aquarium.audio.contextState)).toBe('suspended');
   expect(await page.evaluate(() => [window.__aquarium.width, window.__aquarium.height])).toEqual([1200, 720]);
   expect(errors).toEqual([]);
 });
