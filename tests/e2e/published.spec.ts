@@ -26,7 +26,8 @@ test('published aquarium loads its neural Worker and supports interaction', asyn
   await expect.poll(() => page.evaluate(() => window.__aquarium.audio.unlocked)).toBe(true);
   await page.locator('#tank canvas').focus(); await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('Enter');
   await expect.poll(() => page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBeGreaterThan(0);
-  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.level)).toBeGreaterThan(.0001);
+  expect(await page.evaluate(() => window.__aquarium.audio.lastMidi)).toBe(72);
+  expect(await page.evaluate(() => window.__aquarium.audio.lastDelay)).toBeLessThanOrEqual(.076);
   await expect(page.locator('body')).toHaveClass('tank-view');
   await expect.poll(() => page.evaluate(() => {
     const r = document.querySelector('canvas')!.getBoundingClientRect();
