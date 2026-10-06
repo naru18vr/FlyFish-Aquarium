@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import data from '../../public/data/connectome.json';
 import { BrainModel } from '../../src/brain/model';
 import { isConnectome } from '../../src/brain/connectome';
-import { Aquarium, MAX_FOOD } from '../../src/simulation';
+import { Aquarium, MAX_FISH_SPEED, MAX_FOOD } from '../../src/simulation';
 import { BASE_HEIGHT, BASE_WIDTH, BOUNDS, distance, HEIGHT, safePosition, SpatialGrid, tankSize, WIDTH } from '../../src/math';
 import { DEFAULTS, emptySense, type Connectome, type Quality } from '../../src/types';
 import { FISH_SPECIES, PREDATOR_KINDS } from '../../src/species';
@@ -209,5 +209,39 @@ describe('aquarium interactions and safety', () => {
     const grid = new SpatialGrid<{ x: number; y: number; id: number }>(120);
     const objects = [{ x: 119, y: 120, id: 1 }, { x: 121, y: 120, id: 2 }, { x: 240, y: 240, id: 3 }];
     grid.rebuild(objects); expect(grid.near(objects[0], 5).map(o => o.id)).toEqual([1, 2]);
+  });
+});
+
+
+describe('short responsive fish darts', () => {
+  const setup = (species = 'tetra' as typeof FISH_SPECIES[number], count = 1) => {
+    const sim = new Aquarium({ ...DEFAULTS, fishCount:count, fishSpecies:species, flyWeight:0, predators:0, stations:0, rocks:false, seaweed:false, variation:0 });
+    sim.fish.forEach((f,i)=>Object.assign(f,{x:400+i*70,y:300,angle:0,speed:30,hunger:0,phase:0})); return sim;
+  };
+  it('accelerates in 120ms, recovers after a dart and keeps repeated taps bounded', () => {
+    const sim=setup(),f=sim.fish[0];sim.scare(f,{x:390,y:300}); expect(f.speed).toBe(30);
+    for(let i=0;i<6;i++)sim.update(.02); expect(f.speed).toBeGreaterThan(200);const peak=f.speed;
+    for(let i=0;i<100;i++)sim.update(.02); expect(f.speed).toBeLessThan(peak*.6);
+    for(let i=0;i<200;i++){sim.scare(f,{x:f.x-10,y:f.y});sim.update(.04);expect(f.speed).toBeLessThanOrEqual(MAX_FISH_SPEED);expect(Number.isFinite(f.x+f.y)).toBe(true);}
+  });
+  it('turns away from a tap ahead and gives small fish a quicker dart than puffers', () => {
+    const sim=setup(),f=sim.fish[0];sim.scare(f,{x:415,y:300});for(let i=0;i<35;i++)sim.update(.02);
+    expect(f.x).toBeLessThan(400);expect(Math.cos(f.angle)).toBeLessThan(0);
+    const speeds=FISH_SPECIES.map(species=>{const s=setup(species);s.scare(s.fish[0],{x:390,y:300});for(let i=0;i<6;i++)s.update(.02);return s.fish[0].speed;});
+    expect(speeds[1]).toBeGreaterThan(speeds[3]*1.4);
+  });
+  it('starts a brief chase between calm neighbours then returns both to normal swimming', () => {
+    const sim=setup('tetra',2);sim.time=3;sim.update(.03);sim.update(.03);
+    expect(sim.fish.map(f=>f.playRole).sort()).toEqual(['chase','flee']);expect(sim.fish.every(f=>f.burstLeft>0)).toBe(true);
+    for(let i=0;i<100;i++)sim.update(.02);expect(sim.fish.every(f=>f.playLeft===0&&f.speed<150)).toBe(true);
+    const afraid=setup('tetra',2);afraid.time=3;afraid.scare(afraid.fish[0],{x:390,y:300});afraid.update(.02);
+    expect(afraid.fish.every(f=>f.playRole===null)).toBe(true);
+  });
+  it('a nearby predator triggers a bounded dart without overriding pure neural motor decisions', () => {
+    const sim=setup();sim.settings.predators=1;sim.applySettings();Object.assign(sim.predators[0],{x:360,y:300});sim.update(.03);sim.update(.03);
+    expect(sim.fish[0].burstLeft).toBeGreaterThan(0);
+    sim.settings.flyWeight=1;sim.fish[0].fly={turnLeft:.2,turnRight:.7,accelerate:.8,brake:.1};sim.update(.02);
+    expect(sim.fish[0].action).toEqual(sim.fish[0].fly);
+    sim.settings.rocks=true;sim.applySettings();for(let i=0;i<500;i++){sim.scare(sim.fish[0],sim.predators[0]);sim.update(.04);expect(sim.rocks.every(r=>distance(sim.fish[0],r)>=r.r+13-.001)).toBe(true);}
   });
 });

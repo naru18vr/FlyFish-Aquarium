@@ -727,3 +727,30 @@ test('idle dashboard explains waiting and collects ready rewards once', async ({
   await page.reload(); await page.waitForFunction(()=>window.__aquarium?.ready); await page.locator('#idle-open').click();
   await expect(page.locator('#idle-claim-all')).toBeDisabled(); expect(await page.evaluate(()=>window.__aquarium.game.state.shells)).toBe(wallet+13);
 });
+
+
+test('a real fish tap starts a fast short dart and returns to calm swimming', async ({ page }, testInfo) => {
+  await page.locator('#pause').click();
+  await page.evaluate(()=>{const sim=window.__aquarium.sim;Object.assign(sim.settings,{flyWeight:0,fishCount:1,predators:0,stations:0,rocks:false,seaweed:false,variation:0});sim.applySettings();Object.assign(sim.fish[0],{x:400,y:300,angle:0,speed:30,hunger:0,phase:0});});
+  const canvas=page.locator('#tank canvas'),box=await canvas.boundingBox();expect(box).not.toBeNull();
+  await canvas.click({position:{x:box!.width*390/1200,y:box!.height*300/720}});
+  expect(await page.evaluate(()=>window.__aquarium.sim.fish[0].speed)).toBe(30);
+  await page.locator('#pause').click();
+  await expect.poll(()=>page.evaluate(()=>window.__aquarium.sim.fish[0].speed)).toBeGreaterThan(200);
+  await page.screenshot({path:testInfo.outputPath('fish-dart.png')});
+  await expect.poll(()=>page.evaluate(()=>window.__aquarium.sim.fish[0].speed),{timeout:15000}).toBeLessThan(140);
+  expect(await page.evaluate(()=>window.__aquarium.sim.fish[0].burstLeft)).toBe(0);
+});
+
+
+test('a raised fish swims away from a tap without an instantaneous position jump', async ({ page }) => {
+  await page.evaluate(found=>{const a=window.__aquarium;a.game.state.found=found;localStorage.setItem('flyfish-play-v1',JSON.stringify(a.game.state));a.idle.state.lastSeen=Date.now()-3600000;localStorage.setItem('flyfish-idle-v1',JSON.stringify(a.idle.state));},JOURNAL.map(entry=>entry.id));
+  await page.reload();await page.waitForFunction(()=>window.__aquarium?.ready);await page.locator('#pause').click();await page.locator('#idle-open').click();
+  const id=await page.evaluate(()=>window.__aquarium.idle.state.young[0].id);
+  await page.locator(`[data-child-room="${id}"]`).selectOption('1');await page.locator('[data-room="1"]').click();await page.locator('#play-close').click();
+  await expect.poll(()=>page.evaluate(()=>window.__aquarium.youngPositions.length)).toBe(1);
+  const before=await page.evaluate(()=>window.__aquarium.youngPositions[0]),canvas=page.locator('#tank canvas'),box=await canvas.boundingBox();
+  await canvas.click({position:{x:box!.width*before.x/1200,y:box!.height*before.y/720}});
+  const after=await page.evaluate(()=>window.__aquarium.youngPositions[0]);expect(Math.hypot(after.x-before.x,after.y-before.y)).toBeLessThan(.1);
+  await page.locator('#pause').click();await expect.poll(()=>page.evaluate(before=>{const f=window.__aquarium.youngPositions[0];return Math.hypot(f.x-before.x,f.y-before.y);},before)).toBeGreaterThan(30);
+});

@@ -181,3 +181,16 @@ test('published idle dashboard receives offline rewards together and shows the n
   await page.reload(); await page.waitForFunction(()=>window.__aquarium?.ready); await page.locator('#idle-open').click();
   await expect(page.locator('#idle-claim-all')).toBeDisabled(); expect(await page.evaluate(()=>window.__aquarium.game.state.shells)).toBe(wallet+amount); expect(errors).toEqual([]);
 });
+
+
+test('published fish dart away quickly after a tap and settle down', async ({ page }, testInfo) => {
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.goto('./?debug');await page.waitForFunction(()=>window.__aquarium?.ready);await page.locator('#pause').click();
+  await page.evaluate(()=>{const sim=window.__aquarium.sim;Object.assign(sim.settings,{flyWeight:0,fishCount:1,predators:0,stations:0,rocks:false,seaweed:false,variation:0});sim.applySettings();Object.assign(sim.fish[0],{x:400,y:300,angle:0,speed:30,hunger:0,phase:0});});
+  const canvas=page.locator('#tank canvas'),box=await canvas.boundingBox();expect(box).not.toBeNull();
+  await canvas.click({position:{x:box!.width*390/1200,y:box!.height*300/720}});
+  expect(await page.evaluate(()=>window.__aquarium.sim.fish[0].speed)).toBe(30);await page.locator('#pause').click();
+  await expect.poll(()=>page.evaluate(()=>window.__aquarium.sim.fish[0].speed)).toBeGreaterThan(200);
+  await page.screenshot({path:testInfo.outputPath('published-fish-dart.png')});
+  await expect.poll(()=>page.evaluate(()=>window.__aquarium.sim.fish[0].speed),{timeout:15000}).toBeLessThan(140);expect(errors).toEqual([]);
+});

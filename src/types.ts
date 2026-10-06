@@ -36,6 +36,8 @@ export interface Fish extends Point {
   energy: number; hunger: number; fear: number; color: number; phase: number;
   traits: { maxSpeed: number; turnSpeed: number; curiosity: number; fearSensitivity: number; foodSensitivity: number; brainNoise: number };
   startleLeft: number; startleRight: number; eating: number;
+  burstLeft: number; burstStrength: number; burstCooldown: number; escapeAngle: number | null;
+  playmate: number | null; playRole: 'chase' | 'flee' | null; playLeft: number; playCooldown: number;
   fly: Motor; program: Motor; action: Motor; sensory: Sensory;
   activity: number[]; spikes: number; target: Point | null; flyWeight: number; programWeight: number;
 }

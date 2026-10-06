@@ -1,7 +1,7 @@
 import { Application, Container, Graphics, Sprite, Texture } from 'pixi.js';
-import { BASE_HEIGHT, BASE_WIDTH, HEIGHT, random, WIDTH } from './math';
+import { BASE_HEIGHT, BASE_WIDTH, HEIGHT, random, safePosition, WIDTH } from './math';
 import type { Aquarium } from './simulation';
-import type { Fish, Point } from './types';
+import type { Fish, Point, Rock } from './types';
 import { FISH_PROFILES, FISH_SPECIES, PREDATOR_KINDS, PREDATOR_PROFILES, type FishSpecies, type PredatorKind } from './species';
 import { AquariumGame, degreeOf, PHRASES, type VisitorKind } from './game';
 import type { IdleAquarium, YoungFish } from './idle';
@@ -31,6 +31,7 @@ export class AquariumRenderer {
   idle?: IdleAquarium;
   private idleGarden = new Graphics();
   private youngSprites = new Map<number, Sprite>();
+  private youngDarts = new Map<number, { x: number; y: number; left: number }>();
   private youngTextures = new Map<FishSpecies, Texture[][]>();
   app = new Application();
   private background = new Container(); private plants = new Container(); private scenery = new Container(); private creatures = new Container(); private foreground = new Container();
@@ -79,7 +80,7 @@ export class AquariumRenderer {
     this.plants.removeChildren().forEach(child => child.destroy()); this.plantSprites = [];
     this.drawBackground(); this.drawPlants(); this.settingsKey = ''; this.propKey = '';
     for (const bubble of this.bubblePoints) { bubble.x *= WIDTH / oldWidth; bubble.y *= HEIGHT / oldHeight; }
-    this.ripple = [];
+    this.ripple = []; this.youngDarts.clear();
     // Resizing clears the drawing buffer; draw now even while paused.
     this.render(sim, 0, 0);
   }
@@ -171,8 +172,14 @@ export class AquariumRenderer {
     return best;
   }
   youngPositions() { return (this.idle?.state.young ?? []).flatMap(f => { const sprite = this.youngSprites.get(f.id); return sprite?.visible ? [{ id: f.id, x: sprite.x, y: sprite.y }] : []; }); }
-  scareYoung(id: number, point: Point) { const sprite = this.youngSprites.get(id); if (sprite) sprite.position.set(Math.max(24, Math.min(WIDTH - 24, sprite.x + (id % 2 ? 60 : -60))), Math.max(100, sprite.y - 40)); }
-  private drawIdle(time: number, dt: number, food: Point[]) {
+  scareYoung(id: number, point: Point) {
+    const sprite = this.youngSprites.get(id), fish = this.idle?.state.young.find(f => f.id === id);
+    if (!sprite || !fish) return;
+    const angle = Math.hypot(sprite.x - point.x, sprite.y - point.y) > 1 ? Math.atan2(sprite.y - point.y, sprite.x - point.x) : (id % 2 ? -.7 : -2.4);
+    const speed = 250 * FISH_PROFILES[fish.species].speed;
+    this.youngDarts.set(id, { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed, left: .5 });
+  }
+  private drawIdle(time: number, dt: number, food: Point[], rocks: Rock[]) {
     const s = this.idle?.state; this.idleGarden.clear(); if (!s) return;
     const scale = 2 * Math.max(1, Math.min(2.5, HEIGHT / WIDTH)), x = WIDTH * .46, y = HEIGHT - 92;
     const color = ['#8fc690', '#ddabc2', '#d1dba0'][s.garden];
@@ -188,12 +195,12 @@ export class AquariumRenderer {
       this.idleGarden.rect(ex, y - 12 * scale, 7 * scale, 10 * scale).fill('#fff1d5').rect(ex + 2 * scale, y - 10 * scale, 3 * scale, 3 * scale).fill('#ead4b5');
     }
     const ids = new Set(s.young.map(f => f.id));
-    for (const [id, sprite] of this.youngSprites) if (!ids.has(id)) { sprite.destroy(); this.youngSprites.delete(id); }
+    for (const [id, sprite] of this.youngSprites) if (!ids.has(id)) { sprite.destroy(); this.youngSprites.delete(id); this.youngDarts.delete(id); }
     for (let i = 0; i < s.young.length; i++) {
       const f = s.young[i]; let sprite = this.youngSprites.get(f.id);
       const c = s.world.children[f.id];
       if (!sprite) { sprite = new Sprite(); sprite.anchor.set(.5); sprite.position.set(WIDTH * .5 + Math.sin(i * .8) * WIDTH * .19, HEIGHT * .58 + Math.cos(i * .56) * Math.min(65, HEIGHT * .1) + i % 3 * 15); this.creatures.addChild(sprite); this.youngSprites.set(f.id, sprite); }
-      sprite.visible = !!c && c.room === s.world.room; if (!sprite.visible) continue;
+      sprite.visible = !!c && c.room === s.world.room; if (!sprite.visible) { this.youngDarts.delete(f.id); continue; }
       sprite.texture = this.youngTextures.get(f.species)![c.shade][Math.floor(time * 4 + i) % 2];
       const age = stage(s.total - f.born), phase = time * .35 + i * .8, size = FISH_PROFILES[f.species].scale * [.52, .75, 1][age];
       sprite.scale.set(Math.cos(phase) < 0 ? -size : size, size);
@@ -203,8 +210,22 @@ export class AquariumRenderer {
       const meal = food.find(p => Math.hypot(p.x - sprite.x, p.y - sprite.y) < 200);
       if (meal) target = meal;
       else if (this.game?.state.followPointer && this.game.pointer && !this.game.phrase) target = { x: this.game.pointer.x + Math.sin(phase) * 25, y: this.game.pointer.y + Math.cos(phase) * 20 };
-      const blend = Math.min(1, dt * 2.5); sprite.position.set(sprite.x + (target.x - sprite.x) * blend, sprite.y + (target.y - sprite.y) * blend);
-      sprite.x = Math.max(24, Math.min(WIDTH - 24, sprite.x)); sprite.y = Math.max(100, Math.min(HEIGHT - 110, sprite.y));
+      const dart = this.youngDarts.get(f.id);
+      if (dart) {
+        const delta = Math.max(0, Math.min(.04, dt)), steps = Math.max(1, Math.ceil(Math.hypot(dart.x, dart.y) * delta / 8));
+        for (let step = 0; step < steps; step++) {
+          const pos = safePosition({ x: sprite.x + dart.x * delta / steps, y: sprite.y + dart.y * delta / steps }, rocks, 24);
+          sprite.position.set(pos.x, pos.y); if (pos.touched) { dart.left = 0; break; }
+        }
+        sprite.scale.x = (dart.x < 0 ? -1 : 1) * size;
+        sprite.texture = this.youngTextures.get(f.species)![c.shade][Math.floor(time * 22 + i) % 2];
+        dart.left -= delta; dart.x *= Math.exp(-delta * 2); dart.y *= Math.exp(-delta * 2);
+        if (dart.left <= 0) this.youngDarts.delete(f.id);
+      } else {
+        const blend = Math.min(1, dt * 2.5); sprite.position.set(sprite.x + (target.x - sprite.x) * blend, sprite.y + (target.y - sprite.y) * blend);
+      }
+      const pos = safePosition({ x: Math.max(24, Math.min(WIDTH - 24, sprite.x)), y: Math.max(100, Math.min(HEIGHT - 110, sprite.y)) }, rocks, 24);
+      sprite.position.set(pos.x, pos.y);
     }
     if (s.world.room === 0) {
       const cx = WIDTH * .78, cy = HEIGHT - 100, unit = Math.min(4, scale);
@@ -241,7 +262,7 @@ export class AquariumRenderer {
       if (sim.isAway(fish)) { const sprite = this.fishSprites.get(fish.id); if (sprite) sprite.visible = false; continue; }
       this.drawFish(fish, sim.time); this.fishSprites.get(fish.id)!.visible = true;
     }
-    this.drawIdle(sim.time, dt, sim.food);
+    this.drawIdle(sim.time, dt, sim.food, sim.activeRocks());
     const predatorIds = new Set(sim.predators.map(p => p.id));
     for (const [id, sprite] of this.predatorSprites) if (!predatorIds.has(id)) { sprite.destroy(); this.predatorSprites.delete(id); }
     for (const p of sim.predators) {
@@ -309,7 +330,7 @@ export class AquariumRenderer {
     let sprite = this.fishSprites.get(fish.id);
     if (!sprite) { sprite = new Sprite(); sprite.anchor.set(.5); this.creatures.addChild(sprite); this.fishSprites.set(fish.id, sprite); }
     const scared = fish.fear > .38;
-    const frame = fish.eating > 0 ? 2 : Math.floor(time * (scared ? 14 : fish.speed > 105 ? 10 : 5) + fish.phase) % 2;
+    const frame = fish.eating > 0 ? 2 : Math.floor(time * (fish.burstLeft > 0 ? 22 : scared ? 14 : fish.speed > 105 ? 10 : 5) + fish.phase) % 2;
     sprite.texture = this.textures.get(fish.species)![fish.color][frame];
     const scale = FISH_PROFILES[fish.species].scale + (fish.id % 3) * .08;
     sprite.position.set(Math.round(fish.x), Math.round(fish.y + Math.sin(time * 2 + fish.phase) * 1.5));

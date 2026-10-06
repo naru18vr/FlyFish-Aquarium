@@ -3,13 +3,14 @@ import { emptySense, idleMotor, type Fish, type Food, type Motor, type Point, ty
 import { FISH_PROFILES, FISH_SPECIES, PREDATOR_KINDS, PREDATOR_PROFILES } from './species';
 
 export const MAX_FOOD = 100;
+export const MAX_FISH_SPEED = 360;
 export class Aquarium {
   fish: Fish[] = []; predators: Predator[] = []; food: Food[] = []; stations: Station[] = [];
   readonly rocks: Rock[] = [{ x: 291, y: 600, r: 54 }, { x: 822, y: 597, r: 65 }, { x: 879, y: 628, r: 31 }];
   time = 0; eaten = 0; selected: number | null = null;
   private rng = random(481516); private foodId = 0;
   private fishGrid = new SpatialGrid<Fish>(); private foodGrid = new SpatialGrid<Food>(); private predatorGrid = new SpatialGrid<Predator>();
-  private aiTime = 0;
+  private aiTime = 0; private nextPlay = 3;
   private stationLayout = '';
   onEat: (fish: Fish, manual: boolean) => void = () => {};
   isAway: (fish: Fish) => boolean = () => false;
@@ -68,7 +69,7 @@ export class Aquarium {
   }
   reset() {
     this.fish = []; this.predators = []; this.food = []; this.stations = [];
-    this.time = 0; this.aiTime = 0; this.eaten = 0; this.selected = null; this.rng = random(481516); this.stationLayout = '';
+    this.time = 0; this.aiTime = 0; this.nextPlay = 3; this.eaten = 0; this.selected = null; this.rng = random(481516); this.stationLayout = '';
     this.applySettings();
   }
   private spawnFish(): Fish {
@@ -83,6 +84,8 @@ export class Aquarium {
     return { ...point, id, species: this.settings.fishSpecies === 'mixed' ? FISH_SPECIES[(id - 1) % FISH_SPECIES.length] : this.settings.fishSpecies, angle: this.rng() * Math.PI * 2, speed: 28 + this.rng() * 20, vx: 0, vy: 0,
       energy: .8 + this.rng() * .2, hunger: .3 + this.rng() * .5, fear: 0, color: Math.floor(this.rng() * 5), phase: this.rng() * Math.PI * 2,
       traits: { maxSpeed: traits(), turnSpeed: traits(), curiosity: traits(), fearSensitivity: traits(), foodSensitivity: traits(), brainNoise: traits() },
+      burstLeft: 0, burstStrength: 0, burstCooldown: 0, escapeAngle: null,
+      playmate: null, playRole: null, playLeft: 0, playCooldown: 0,
       startleLeft: 0, startleRight: 0, eating: 0, fly: idleMotor(), program: idleMotor(), action: idleMotor(), sensory: emptySense(), activity: Array(32).fill(0), spikes: 0, target: null,
       flyWeight: this.settings.flyWeight, programWeight: 1 - this.settings.flyWeight };
   }
@@ -107,7 +110,8 @@ export class Aquarium {
       const intensity = f === fish ? this.settings.startle : this.settings.startle * this.settings.nearby * (d < 85 ? .5 : .2);
       const side = (point.x - f.x) * -Math.sin(f.angle) + (point.y - f.y) * Math.cos(f.angle);
       if (side < 0) f.startleLeft = Math.max(f.startleLeft, intensity); else f.startleRight = Math.max(f.startleRight, intensity);
-      // Only sensory state changes here. Physics responds to mixed motor output.
+      if (intensity > .03) f.escapeAngle = distance(f, point) > 1 ? Math.atan2(f.y - point.y, f.x - point.x) : f.angle + (side < 0 ? 1.7 : -1.7);
+      // No position or speed jump: the mixed motor output drives the response.
     }
     this.aiTime = .05;
   }
@@ -117,8 +121,22 @@ export class Aquarium {
     for (const r of this.activeRocks()) result = Math.max(result, clamp(1 - (distance(point, r) - r.r) / 65));
     return result;
   }
+  private startPlay() {
+    if (this.time < this.nextPlay || this.settings.flyWeight >= 1) return;
+    this.nextPlay = this.time + 3 + this.rng() * 4;
+    const calm = (f: Fish) => !this.isAway(f) && f.fear < .15 && Math.max(f.startleLeft, f.startleRight) < .03 && f.playCooldown <= 0 && f.playLeft <= 0 && this.wall(f) < .12 && !this.companion?.(f) && !this.foodGrid.near(f, 290).length && !this.predatorGrid.near(f, 250).length;
+    const eligible = this.fish.filter(calm);
+    if (eligible.length < 2) return;
+    const first = eligible[Math.floor(this.rng() * eligible.length)];
+    const second = eligible.find(f => f !== first && distance(f, first) > 45 && distance(f, first) < 115);
+    if (!second) return;
+    for (const [fish, other, role] of [[first, second, 'chase'], [second, first, 'flee']] as const) {
+      fish.playmate = other.id; fish.playRole = role; fish.playLeft = 1.35; fish.playCooldown = 7;
+    }
+  }
   senseAndThink() {
     this.fishGrid.rebuild(this.fish.filter(f => !this.isAway(f))); this.foodGrid.rebuild(this.food); this.predatorGrid.rebuild(this.predators);
+    this.startPlay();
     for (const f of this.fish) {
       if (this.isAway(f)) continue;
       const s = emptySense();
@@ -163,12 +181,20 @@ export class Aquarium {
         if (close) desired = Math.atan2(f.y - close.y, f.x - close.x);
         else desired += angleDiff(Math.atan2(neighbours.reduce((sum, n) => sum + Math.sin(n.angle), 0), neighbours.reduce((sum, n) => sum + Math.cos(n.angle), 0)), f.angle) * .28;
       }
-      if (enemy) { desired = Math.atan2(f.y - enemy.y, f.x - enemy.x); accel = .75 + .25 * (1 - s.enemyDistance); f.target = enemy; }
+      const playmate = f.playLeft > 0 ? this.fish.find(other => other.id === f.playmate && !this.isAway(other)) : null;
+      if (!playmate || enemy || food || companion || Math.max(s.startleLeft, s.startleRight) > .03 || distance(f, playmate) > 220) {
+        f.playLeft = 0; f.playmate = null; f.playRole = null;
+      } else {
+        desired = f.playRole === 'chase' ? Math.atan2(playmate.y - f.y, playmate.x - f.x) : Math.atan2(f.y - playmate.y, f.x - playmate.x) + Math.sin(this.time * 9 + f.phase) * .35;
+        accel = .72; f.target = playmate;
+      }
+      if (enemy) { desired = Math.atan2(f.y - enemy.y, f.x - enemy.x) + Math.sin(this.time * 11 + f.phase) * .22; accel = .75 + .25 * (1 - s.enemyDistance); f.target = enemy; }
       if (s.wallFront > .45) { desired = f.angle + (s.wallLeft < s.wallRight ? -1.6 : 1.6); brake = .3; }
       if (Math.max(s.startleLeft, s.startleRight) > .03) {
-        desired = f.angle + (s.startleLeft > s.startleRight ? 1.9 : -1.9) + Math.sin(f.phase + this.time) * .25;
+        desired = (f.escapeAngle ?? f.angle + (s.startleLeft > s.startleRight ? 1.9 : -1.9)) + Math.sin(f.phase + this.time * 11) * .18;
         accel = .65 + .35 * Math.max(s.startleLeft, s.startleRight); brake = 0;
       }
+      if (s.wallFront > .8) { desired = f.angle + (s.wallLeft < s.wallRight ? -1.6 : 1.6); brake = .55; }
       const turn = clamp(angleDiff(desired, f.angle) / 1.4, -1, 1);
       f.program = { turnLeft: Math.max(0, -turn), turnRight: Math.max(0, turn), accelerate: accel, brake };
     }
@@ -189,7 +215,7 @@ export class Aquarium {
     for (const f of this.fish) {
       if (this.isAway(f)) continue;
       f.angle = Number.isFinite(f.angle) ? f.angle : 0;
-      f.speed = clamp(f.speed, 0, 190);
+      f.speed = clamp(f.speed, 0, MAX_FISH_SPEED);
       f.fear = clamp(f.fear);
       const w = this.settings.flyWeight;
       const mix = (key: keyof Motor) => clamp(f.fly[key] * w + f.program[key] * (1 - w));
@@ -197,16 +223,30 @@ export class Aquarium {
       f.flyWeight = w; f.programWeight = 1 - w;
       const variation = this.settings.variation * .23;
       const profile = FISH_PROFILES[f.species];
-      f.angle += (f.action.turnRight - f.action.turnLeft) * 3.5 * profile.turn * (1 + f.traits.turnSpeed * variation) * dt;
+      f.burstCooldown = Math.max(0, f.burstCooldown - dt); f.playCooldown = Math.max(0, f.playCooldown - dt);
+      f.playLeft = Math.max(0, f.playLeft - dt);
+      const alarm = Math.max(f.startleLeft, f.startleRight, 1 - f.sensory.enemyDistance);
+      if (f.burstCooldown <= 0 && (alarm > .28 || f.playLeft > 0)) {
+        f.burstStrength = alarm > .28 ? clamp(alarm, .5, 1) : .42;
+        f.burstLeft = .48; f.burstCooldown = alarm > .28 ? 1.25 : .8;
+      }
+      f.burstLeft = Math.max(0, f.burstLeft - dt);
+      const burst = f.burstStrength * Math.min(1, f.burstLeft / .16);
+      if (Math.max(f.startleLeft, f.startleRight) < .03) f.escapeAngle = null;
+      f.angle += (f.action.turnRight - f.action.turnLeft) * 3.5 * (1 + burst * 5) * profile.turn * (1 + f.traits.turnSpeed * variation) * dt;
       f.angle = angleDiff(f.angle, 0);
-      const targetSpeed = clamp((22 + f.action.accelerate * 140) * profile.speed * (1 - f.action.brake * .65) * (1 + f.traits.maxSpeed * variation), 0, 190);
-      f.speed += (targetSpeed - f.speed) * Math.min(1, dt * 3);
+      const turningAway = f.escapeAngle !== null && Math.abs(angleDiff(f.escapeAngle, f.angle)) > 1;
+      const targetSpeed = clamp((22 + f.action.accelerate * 140) * profile.speed * (1 + burst * 1.8 * profile.speed) * (turningAway ? .4 : 1) * (1 - f.action.brake * .65) * (1 + f.traits.maxSpeed * variation), 0, MAX_FISH_SPEED);
+      f.speed += (targetSpeed - f.speed) * (1 - Math.exp(-dt * (burst > 0 && targetSpeed > f.speed ? 22 : 3)));
       if (this.settings.seaweed && f.y > HEIGHT - 255 && [80, 190, 610, 1040, 1120].some(x => Math.abs(x * WIDTH / BASE_WIDTH - f.x) < 26)) f.speed *= Math.exp(-dt * .5);
       f.vx = Math.cos(f.angle) * f.speed; f.vy = Math.sin(f.angle) * f.speed;
-      // dt and speed bounds keep displacement smaller than fish radius, so no tunnelling.
-      const pos = safePosition({ x: f.x + f.vx * dt, y: f.y + f.vy * dt }, this.activeRocks());
-      f.x = pos.x; f.y = pos.y;
-      if (pos.touched) { f.speed *= .93; f.startleLeft = Math.max(f.startleLeft, .08); }
+      // Keep each collision step below the body radius even during a dart.
+      const steps = Math.max(1, Math.ceil(f.speed * dt / 8));
+      for (let step = 0; step < steps; step++) {
+        const pos = safePosition({ x: f.x + f.vx * dt / steps, y: f.y + f.vy * dt / steps }, this.activeRocks());
+        f.x = pos.x; f.y = pos.y;
+        if (pos.touched) { f.speed *= .7; f.startleLeft = Math.max(f.startleLeft, .08); break; }
+      }
       f.startleLeft *= Math.exp(-dt * 2); f.startleRight *= Math.exp(-dt * 2);
       const fear = Math.max(f.startleLeft, f.startleRight, 1 - f.sensory.enemyDistance);
       f.fear += (fear - f.fear) * Math.min(1, dt * 4);
