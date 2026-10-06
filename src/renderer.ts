@@ -243,7 +243,7 @@ export class AquariumRenderer {
     const phrase = this.game?.phrase;
     if (phrase) {
       const degree = PHRASES[phrase.index].notes[phrase.step];
-      for (const f of sim.fish) if (degreeOf(f.id) === degree) {
+      for (const f of sim.fish) if (!sim.isAway(f) && degreeOf(f.id) === degree) {
         this.selection.circle(f.x, f.y, 28 + Math.sin(sim.time * 5) * 2).stroke({ color: '#ffe5a0', alpha: .85, width: 2 });
         this.selection.rect(f.x - 3, f.y - 39, 6, 6).fill('#ffe5a0');
       }
