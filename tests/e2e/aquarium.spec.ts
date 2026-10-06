@@ -69,7 +69,7 @@ test('shell purchases alter the tank, positions and ownership survive reset and 
 });
 
 test('observed behavior enters the journal and visiting creatures can be greeted', async ({ page }, testInfo) => {
-  await page.locator('#pause').click();
+  await page.locator('#pause').click(); await page.locator('#tank-open').click();
   await page.evaluate(() => {
     const { game, sim } = window.__aquarium;
     const fish = sim.fish.slice(0, 3); fish.forEach((f, i) => { f.x = 220 + i * 20; f.y = 170; f.angle = .1; f.speed = 30; f.fear = 0; });
@@ -77,11 +77,15 @@ test('observed behavior enters the journal and visiting creatures can be greeted
     for (let i = 0; i < 42; i++) game.update(1, [], [], 12);
   });
   await expect(page.locator('#visitor-catch')).toContainText('おさんぽカニ');
-  await page.locator('#visitor-catch').click(); expect(await page.evaluate(() => window.__aquarium.game.state.visits.crab)).toBe(1);
+  const crab = await page.evaluate(() => {
+    const a = window.__aquarium, p = a.game.visitorPoint(a.width, a.height)!, r = document.querySelector('canvas')!.getBoundingClientRect();
+    return { x: r.left + p.x / a.width * r.width, y: r.top + p.y / a.height * r.height };
+  });
+  await page.mouse.click(crab.x, crab.y); expect(await page.evaluate(() => window.__aquarium.game.state.visits.crab)).toBe(1);
   await page.locator('#play-open').click(); await page.locator('[data-play-tab="journal"]').click();
   await expect(page.locator('[data-discovery="school"]')).toHaveClass(/found/); await expect(page.locator('[data-discovery="station"]')).toHaveClass(/found/);
   await page.screenshot({ path: testInfo.outputPath('game-journal.png') });
-  await page.locator('#play-close').click();
+  await page.locator('#play-close').click(); await page.locator('#tank-exit').click();
   await page.evaluate(() => { const { game } = window.__aquarium; for (let i = 0; i < 150; i++) game.update(1, [], [], 20); });
   await expect(page.locator('#visitor-catch')).toContainText('夜のほたる魚');
   const point = await page.evaluate(() => window.__aquarium.game.visitorPoint(window.__aquarium.width, window.__aquarium.height)!);

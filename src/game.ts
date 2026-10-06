@@ -27,7 +27,7 @@ export const SHOP = [
 export type ShopId = typeof SHOP[number]['id'];
 export type VisitorKind = 'crab' | 'chest' | 'glow';
 export const VISITORS: Record<VisitorKind, { name: string; hint: string; reward: number }> = {
-  crab: { name: 'おさんぽカニ', hint: '砂の上をちょこちょこ。見つけたらタップ！', reward: 4 },
+  crab: { name: 'おさんぽカニ', hint: '岩の上をちょこちょこ。岩がないと泡にぷかり。', reward: 4 },
   chest: { name: '流れてきた宝箱', hint: '水の中をゆっくり流れる小さな宝箱。', reward: 7 },
   glow: { name: '夜のほたる魚', hint: '18時〜6時に遊ぶと会える、光る訪問者。', reward: 5 },
 };
@@ -154,10 +154,13 @@ export class AquariumGame {
     this.state.props[id as 'shell' | 'arch' | 'star'] = { on, position: integer(position, 1, 2) }; this.changed();
   }
   callFriends(point: Point) { this.call = { ...point, until: this.time + 10 }; }
-  visitorPoint(width: number, height: number): Point | null {
+  visitorPoint(width: number, height: number, rocks = true): Point | null {
     if (!this.visitor) return null;
     const age = this.time - this.visitor.born;
-    if (this.visitor.kind === 'crab') return { x: width * (.52 + Math.sin(age * .12) * .23), y: height - 77 };
+    if (this.visitor.kind === 'crab') {
+      const scale = Math.min(1.25, width / 1200);
+      return { x: width * .2425 + Math.sin(age * .12) * 18 * scale, y: rocks ? height - 81 - 98 * scale : height - 160 };
+    }
     if (this.visitor.kind === 'chest') return { x: width * (.58 + Math.sin(age * .08) * .18), y: Math.min(height - 100, 110 + age * 5) };
     return { x: width * (.5 + Math.sin(age * .17) * .27), y: Math.min(height - 110, height * .38 + Math.sin(age * .24) * 45) };
   }

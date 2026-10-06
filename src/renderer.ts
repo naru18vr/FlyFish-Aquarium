@@ -166,7 +166,7 @@ export class AquariumRenderer {
     if (plant !== this.plantKey) { this.plantKey = plant; this.plants.removeChildren().forEach(child => child.destroy()); this.plantSprites = []; this.drawPlants(); }
     const propKey = `${WIDTH}/${HEIGHT}/${JSON.stringify(this.game?.state.props)}`;
     if (propKey !== this.propKey) { this.propKey = propKey; this.drawProps(); }
-    const visitorPoint = this.game?.visitorPoint(WIDTH, HEIGHT);
+    const visitorPoint = this.game?.visitorPoint(WIDTH, HEIGHT, sim.settings.rocks);
     this.visitorSprite.visible = !!visitorPoint;
     if (visitorPoint && this.game?.visitor) {
       const kind = this.game.visitor.kind;
@@ -200,6 +200,7 @@ export class AquariumRenderer {
       this.bubbles.rect(x + 1, y + 1, 2, 2).fill({ color: '#d5edcb', alpha: .5 });
     }
     this.selection.clear();
+    if (visitorPoint && this.game?.visitor?.kind === 'crab' && !sim.settings.rocks) this.selection.circle(visitorPoint.x, visitorPoint.y, 25).stroke({ color: '#bce4ce', width: 2, alpha: .6 });
     const selected = sim.fish.find(f => f.id === sim.selected);
     if (selected) {
       this.selection.circle(selected.x, selected.y, 34).stroke({ color: '#d9ebaa', alpha: .8, width: 1.5 });

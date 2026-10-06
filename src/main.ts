@@ -179,7 +179,7 @@ async function start() {
     const rect = renderer.app.canvas.getBoundingClientRect();
     const point = { x: (event.clientX - rect.left) / rect.width * WIDTH, y: (event.clientY - rect.top) / rect.height * HEIGHT };
     if (point.x < 0 || point.x > WIDTH || point.y < BOUNDS.top || point.y > BOUNDS.bottom + 30) return;
-    const visitor = game.visitorPoint(WIDTH, HEIGHT);
+    const visitor = game.visitorPoint(WIDTH, HEIGHT, settings.rocks);
     if (!event.shiftKey && !inspecting && visitor && distance(point, visitor) < 32) { game.collectVisitor(); void sound.feed(); play.refresh(true); return; }
     const tapped = sim.pick(point);
     if (tapped && !event.shiftKey && !inspecting) playFish(tapped.id, point);
