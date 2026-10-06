@@ -39,7 +39,7 @@ const ui = new UI(settings, sound.settings), sim = new Aquarium(settings), rende
 let savedGame: unknown;
 try { savedGame = JSON.parse(localStorage.getItem(GAME_KEY) || 'null'); } catch { /* Optional storage. */ }
 const game = new AquariumGame(savedGame), play = new GameUI(game, sim);
-play.onMusicStart = () => ui.tankMode(true);
+play.onMusicStart = () => { inspecting = false; sim.selected = null; ui.inspecting(false); ui.inspector(undefined, 0); ui.tankMode(true); };
 renderer.game = game;
 game.onNotice = message => { ui.toast(message); play.message(message); };
 game.onChange = () => { try { localStorage.setItem(GAME_KEY, JSON.stringify(game.state)); } catch { play.storageUnavailable(); } };

@@ -46,8 +46,9 @@ test('notebook names and gentle friendship persist, and friends can be called', 
 });
 
 test('a musical phrase demos, guides notes and rewards a complete keyboard performance', async ({ page }, testInfo) => {
-  await page.locator('#pause').click(); await page.locator('#play-open').click(); await page.locator('[data-play-tab="music"]').click();
+  await page.locator('#pause').click(); await page.locator('#inspect-mode').click(); await page.locator('#play-open').click(); await page.locator('[data-play-tab="music"]').click();
   await page.locator('[data-start-phrase="0"]').click(); await expect(page.locator('body')).toHaveClass('tank-view');
+  await expect(page.locator('#tank-inspect')).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('#music-hud')).toBeVisible(); await expect.poll(() => page.evaluate(() => window.__aquarium.demonstrating)).toBe(false);
   expect(await page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(3);
   await page.locator('#tank canvas').focus(); await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('Enter');
