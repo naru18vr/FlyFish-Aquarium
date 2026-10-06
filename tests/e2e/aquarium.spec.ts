@@ -32,6 +32,9 @@ test('current mode matches applied controls and remains clear after reload and p
   await page.keyboard.press('Escape'); await expect(page.locator('#mode-picker')).toBeHidden(); await expect(page.locator('body')).toHaveClass('tank-view');
   await page.locator('#mode-toggle').click(); await page.locator('[data-interaction-mode="touch"]').click();
   await expect(page.locator('#current-mode')).toHaveText('つつくモード'); await expect(page.locator('#tank-inspect')).toHaveAttribute('aria-pressed', 'false');
+  await page.locator('#tank-inspect').click(); await page.locator('#play-open').click(); await page.locator('[data-play-route="friends"]').click();
+  await page.locator('#gentle-mode').check(); await expect(page.locator('#play-current-mode')).toContainText('なでるモード');
+  await expect(page.locator('#tank-inspect')).toHaveAttribute('aria-pressed', 'false'); await page.locator('#play-close').click();
   await page.setViewportSize({ width: 320, height: 640 }); await page.locator('#mode-toggle').click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   const box = (await page.locator('#mode-picker').boundingBox())!; expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(320);

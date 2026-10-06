@@ -50,10 +50,10 @@ export class GameUI {
       }
     });
     document.querySelector<HTMLButtonElement>('#friend-pet')!.onclick = () => { if (!this.game.state.gentle) this.game.toggleGentle(); this.onPet(); this.refresh(true); this.dialog.close(); };
-    document.querySelector<HTMLInputElement>('#follow-pointer')!.onchange = () => { this.game.toggleFollow(); this.refresh(true); };
+    document.querySelector<HTMLInputElement>('#follow-pointer')!.onchange = () => { this.game.toggleFollow(); if (this.game.state.followPointer) this.onFollow(); this.refresh(true); };
     document.querySelector<HTMLButtonElement>('#friend-follow')!.onclick = () => { if (!this.game.state.followPointer) this.game.toggleFollow(); this.onFollow(); this.refresh(true); this.dialog.close(); };
     document.querySelector<HTMLButtonElement>('#decor-preview')!.onclick = () => this.dialog.close();
-    document.querySelector<HTMLInputElement>('#gentle-mode')!.onchange = () => { this.game.toggleGentle(); this.refresh(true); };
+    document.querySelector<HTMLInputElement>('#gentle-mode')!.onchange = () => { this.game.toggleGentle(); if (this.game.state.gentle) this.onPet(); this.refresh(true); };
     document.querySelector<HTMLSelectElement>('#friend-fish')!.onchange = event => { this.picked = +(event.target as HTMLSelectElement).value; this.updateFriend(); };
     document.querySelector<HTMLFormElement>('#friend-name-form')!.onsubmit = event => { event.preventDefault(); this.game.name(this.picked, document.querySelector<HTMLInputElement>('#friend-name')!.value); this.message('お名前を保存しました。'); document.querySelector('#friend-name-status')!.textContent = '✓ 名前を保存しました'; this.refresh(true); };
     document.querySelector<HTMLButtonElement>('#friend-feed')!.onclick = () => { this.onFeed(); this.message('食べた魚の仲良し度が少し上がるよ。'); };
