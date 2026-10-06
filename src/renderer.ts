@@ -251,9 +251,11 @@ export class AquariumRenderer {
     const g = this.props; g.clear();
     for (const [id, p] of Object.entries(this.game?.state.props ?? {})) {
       if (!p?.on) continue;
-      const x = WIDTH * [.18, .5, .82][p.position] + (id === 'star' ? 25 : id === 'arch' ? -20 : 0), y = HEIGHT - 75;
       // Keep ground decorations recognizable above the toolbar in tall tanks.
       const scale = 1.6 * Math.max(1, Math.min(2.25, HEIGHT / WIDTH));
+      const halfWidth = (id === 'arch' ? 37 : id === 'shell' ? 22 : 17) * scale;
+      const preferredX = WIDTH * [.18, .5, .82][p.position] + (id === 'star' ? 25 : id === 'arch' ? -20 : 0);
+      const x = Math.max(halfWidth + 8, Math.min(WIDTH - halfWidth - 8, preferredX)), y = HEIGHT - 75;
       const rect = (dx: number, dy: number, w: number, h: number, color: string) => g.rect(x + dx * scale, y + dy * scale, w * scale, h * scale).fill(color);
       if (id === 'shell') {
         rect(-22, -8, 44, 9, '#b58f8c'); rect(-18, -19, 36, 13, '#f0bdb0'); rect(-12, -26, 24, 10, '#f9d6bc');
