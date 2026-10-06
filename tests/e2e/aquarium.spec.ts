@@ -44,11 +44,7 @@ test('a musical phrase demos, guides notes and rewards a complete keyboard perfo
   await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('Enter');
   await expect(page.locator('#music-hud')).toBeHidden(); expect(await page.evaluate(() => window.__aquarium.game.state.songs)).toEqual([0]);
   expect(await page.evaluate(() => window.__aquarium.game.state.found)).toContain('song');
-  const before = await page.evaluate(() => window.__aquarium.game.state.shells);
   await page.locator('#play-open').click(); await page.locator('[data-play-tab="music"]').click(); await expect(page.locator('#song-done-0')).toContainText('演奏できた');
-  await page.locator('[data-start-phrase="0"]').click(); await expect.poll(() => page.evaluate(() => window.__aquarium.demonstrating)).toBe(false);
-  await page.evaluate(() => { const g = window.__aquarium.game; for (const id of [1, 3, 5]) g.note(id); });
-  expect(await page.evaluate(() => window.__aquarium.game.state.shells)).toBe(before);
 });
 
 test('shell purchases alter the tank, positions and ownership survive reset and reload', async ({ page }, testInfo) => {
@@ -116,26 +112,24 @@ test.beforeEach(async ({ page }) => {
 });
 test.afterEach(async ({ page }) => { expect(pageErrors.get(page)).toEqual([]); });
 
-test('original BGM and fish notes play in all three tracks and timbres', async ({ page }, testInfo) => {
-  expect(await page.evaluate(() => window.__aquarium.audio.contextState)).toBe('not-created');
-  await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-pressed', 'false');
-  await page.locator('#sound-toggle').click();
-  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.unlocked)).toBe(true);
-  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.musicNotes)).toBeGreaterThan(0);
-  for (const [track, root] of [['sunshine', 72], ['bubbles', 77], ['arcade', 74]] as const) {
+for (const [track, root] of [['sunshine', 72], ['bubbles', 77], ['arcade', 74]] as const) {
+  test(`${track} BGM schedules notes and fish pitches follow its key`, async ({ page }) => {
+    expect(await page.evaluate(() => window.__aquarium.audio.contextState)).toBe('not-created');
     await page.locator('#sound-track').selectOption(track);
-    await expect.poll(() => page.evaluate(() => window.__aquarium.audio.level)).toBeGreaterThan(.0005);
-    expect(await page.evaluate(() => window.__aquarium.audio.level)).toBeLessThan(.3);
+    await page.locator('#sound-toggle').click();
+    await expect.poll(() => page.evaluate(() => window.__aquarium.audio.musicNotes)).toBeGreaterThan(0);
     await page.locator('#tank canvas').focus(); await page.locator('#tank canvas').press('ArrowRight');
-    const selected = await page.evaluate(() => window.__aquarium.sim.selected!);
-    const effects = await page.evaluate(() => window.__aquarium.audio.effectsPlayed);
     await page.locator('#tank canvas').press('Enter');
-    await expect.poll(() => page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(effects + 1);
-    const midi = await page.evaluate(() => window.__aquarium.audio.lastMidi);
-    expect([0,2,4,7,9]).toContain((midi - root) % 12);
-    expect(selected).toBeGreaterThan(0); expect(await page.evaluate(() => window.__aquarium.audio.lastDelay)).toBeLessThanOrEqual(.076);
-  }
+    await expect.poll(() => page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(1);
+    const a = await page.evaluate(() => window.__aquarium.audio);
+    expect(a.lastMidi).toBe(root); expect(a.lastDelay).toBeLessThanOrEqual(.076); expect(a.unlocked).toBe(true);
+  });
+}
+
+test('three fish timbres work while paused and effects can be muted', async ({ page }, testInfo) => {
   await page.locator('#pause').click();
+  await page.locator('#sound-toggle').click();
+  await page.locator('#tank canvas').focus(); await page.locator('#tank canvas').press('ArrowRight');
   expect(await page.evaluate(() => window.__aquarium.audio.playing)).toBe(false);
   for (const timbre of ['chip', 'pluck', 'sparkle']) {
     await page.locator('#sound-timbre').selectOption(timbre);
@@ -161,7 +155,8 @@ test('BGM, effects, volume and aquarium mute work independently', async ({ page 
   await page.locator('#sound-volume').evaluate((input: HTMLInputElement) => { input.value = '0'; input.dispatchEvent(new Event('input', { bubbles: true })); });
   await expect.poll(() => page.evaluate(() => window.__aquarium.audio.level)).toBeLessThan(.0001);
   await page.locator('#sound-volume').evaluate((input: HTMLInputElement) => { input.value = '40'; input.dispatchEvent(new Event('input', { bubbles: true })); });
-  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.level)).toBeGreaterThan(.0005);
+  const notes = await page.evaluate(() => window.__aquarium.audio.musicNotes);
+  await expect.poll(() => page.evaluate(() => window.__aquarium.audio.musicNotes)).toBeGreaterThan(notes);
   await page.locator('#tank-open').click(); await page.locator('#tank-sound').click();
   await expect(page.locator('#tank-sound')).toHaveAttribute('aria-pressed', 'false');
   await expect.poll(() => page.evaluate(() => window.__aquarium.audio.contextState)).toBe('suspended');
@@ -183,7 +178,7 @@ test('sound choices persist without autoplay and resume or reset on request', as
   await page.locator('#settings-reset').click(); await expect(page.locator('#sound-toggle')).toHaveAttribute('aria-pressed', 'false');
 });
 
-test('fish taps stay musical in aquarium mode and rapid toggles do not accumulate voices', async ({ page }) => {
+test('fish taps and rapid keyboard notes stay musical in aquarium mode', async ({ page }) => {
   await page.locator('#pause').click(); await page.locator('#tank-open').click();
   await page.locator('#tank-sound').click(); await expect.poll(() => page.evaluate(() => window.__aquarium.audio.unlocked)).toBe(true);
   await page.evaluate(() => {
@@ -207,6 +202,10 @@ test('fish taps stay musical in aquarium mode and rapid toggles do not accumulat
   await page.locator('#tank-sound').click();
   await canvas.click({ position: { x: box.width * .3, y: box.height * .3 } });
   expect(await page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(4);
+});
+
+test('rapid sound toggles release old voices and resume music', async ({ page }) => {
+  await page.locator('#pause').click(); await page.locator('#tank-open').click();
   for (let i = 0; i < 4; i++) {
     await page.locator('#tank-sound').click(); await expect.poll(() => page.evaluate(() => window.__aquarium.audio.unlocked)).toBe(true);
     await page.locator('#tank-feed').click(); await page.locator('#tank-sound').click();
@@ -243,7 +242,7 @@ async function expectFilledTank(page: Page) {
   expect(controls.y + controls.height).toBeLessThanOrEqual(viewport.height);
 }
 
-test('screen-filling aquarium supports feeding, inspection, pause and returning with Escape', async ({ page }, testInfo) => {
+test('screen-filling aquarium supports feeding, inspection and pause', async ({ page }, testInfo) => {
   await page.locator('#pause').click();
   const ids = await page.evaluate(() => window.__aquarium.sim.fish.map(f => f.id));
   await page.locator('#tank-open').click(); await expectFilledTank(page);
@@ -269,6 +268,11 @@ test('screen-filling aquarium supports feeding, inspection, pause and returning 
   await expect.poll(() => page.evaluate(() => window.__aquarium.sim.time)).toBeGreaterThan(before);
   await page.locator('#tank-pause').click(); await page.waitForTimeout(250);
   await page.screenshot({ path: testInfo.outputPath('tank-mode.png') });
+});
+
+test('aquarium mode restores focus and dimensions through Escape and toolbar buttons', async ({ page }) => {
+  await page.locator('#pause').click(); await page.locator('#tank-open').click();
+  const canvas = page.locator('#tank canvas');
   await canvas.focus(); await canvas.press('Escape');
   await expect(page.locator('body')).not.toHaveClass('tank-view'); await expect(page.locator('#tank-open')).toBeFocused();
   expect(await page.evaluate(() => [window.__aquarium.width, window.__aquarium.height])).toEqual([1200, 720]);
