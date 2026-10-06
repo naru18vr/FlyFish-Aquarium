@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import type { AudioSnapshot } from '../../src/audio';
 import type { Aquarium } from '../../src/simulation';
 import { FISH_PROFILES, FISH_SPECIES, PREDATOR_KINDS } from '../../src/species';
-import type { AquariumGame } from '../../src/game';
+import { JOURNAL, type AquariumGame } from '../../src/game';
 import type { IdleAquarium } from '../../src/idle';
 declare global { interface Window { __aquarium: { sim: Aquarium; youngPositions: { id: number; x: number; y: number }[]; game: AquariumGame; idle: IdleAquarium; demonstrating: boolean; audio: AudioSnapshot; width: number; height: number; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
 const pageErrors = new WeakMap<Page, string[]>();
@@ -705,12 +705,16 @@ test('six new songs produce music, follow their key and persist without autoplay
 });
 
 test('idle dashboard explains waiting and collects ready rewards once', async ({ page }, testInfo) => {
+  await page.locator('#pause').click();
+  // Isolate this receipt check from the independent discovery rewards.
+  await page.evaluate(found=>{window.__aquarium.game.state.found=found;},JOURNAL.map(entry=>entry.id));
   await page.locator('#idle-open').click();
   await expect(page.locator('#idle-reward-total')).toHaveText('貝殻 0 個'); await expect(page.locator('#idle-claim-all')).toBeDisabled();
   await expect(page.locator('#idle-next-growth')).toContainText('次の卵'); await expect(page.locator('#idle-goal-detail')).toContainText('図鑑');
   await page.evaluate(()=>{const s=window.__aquarium.idle.state;s.shells=4;s.growth=1200;s.world.crab.pending=3;window.__aquarium.idle.revision++;});
   await expect(page.locator('#idle-reward-total')).toHaveText('貝殻 13 個'); await expect(page.locator('#idle-open')).toContainText('貝殻13個');
   const wallet=await page.evaluate(()=>window.__aquarium.game.state.shells);
+  await expect(page.locator('#idle-claim-all')).toBeInViewport();
   await page.screenshot({path:testInfo.outputPath('idle-overview.png'),fullPage:true});
   await page.locator('#idle-claim-all').click(); await expect(page.locator('#idle-claim-all')).toBeDisabled();
   expect(await page.evaluate(()=>window.__aquarium.game.state.shells)).toBe(wallet+13);

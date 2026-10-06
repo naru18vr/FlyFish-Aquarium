@@ -9,7 +9,7 @@ export class ModeUI {
   private key = '';
   constructor(private game: AquariumGame, private ui: UI) {
     document.querySelector('#tank')!.insertAdjacentHTML('beforebegin', `<div class="mode-hud"><button id="mode-toggle" aria-expanded="false" aria-controls="mode-picker"><small>現在の操作</small><strong id="current-mode" role="status"></strong><span>切り替え ▾</span></button><div id="mode-picker" hidden><p id="mode-help"></p><div>${Object.entries(MODES).map(([id, [label]]) => `<button data-interaction-mode="${id}" aria-pressed="false">${label}<span class="mode-check" aria-hidden="true">✓</span></button>`).join('')}</div><p>空いている場所のタップは餌やり。放置の成長はどのモードでも続きます。</p><p id="mode-running"></p></div></div>`);
-    document.querySelector('.play-wallet')!.insertAdjacentHTML('afterend', '<div id="play-current-mode" class="play-help" role="status"></div>');
+    document.querySelector('.play-wallet')!.insertAdjacentHTML('afterend', '<div id="play-current-mode" class="play-help" role="status"><strong id="play-mode-brief"></strong><span class="play-mode-detail"></span></div>');
     const toggle = document.querySelector<HTMLButtonElement>('#mode-toggle')!;
     toggle.onclick = () => { const picker = document.querySelector<HTMLElement>('#mode-picker')!; picker.hidden = !picker.hidden; toggle.setAttribute('aria-expanded', String(!picker.hidden)); };
     document.querySelectorAll<HTMLButtonElement>('[data-interaction-mode]').forEach(button => button.onclick = () => {
@@ -35,7 +35,8 @@ export class ModeUI {
     document.querySelector('#current-mode')!.textContent = label;
     document.querySelector('#mode-help')!.textContent = hint;
     document.querySelector('#mode-running')!.textContent = `${running}。泳ぎ方：${this.ui.settingsModeLabel()}`;
-    document.querySelector('#play-current-mode')!.textContent = `現在：${label} · ${follow}。${hint} ページの選択は設定を開きます。遊びの開始ボタンを押すと水槽に戻ります。`;
+    document.querySelector('#play-mode-brief')!.textContent = `現在：${label} · ${follow}。`;
+    document.querySelector('.play-mode-detail')!.textContent = `${hint} ページの選択は設定を開きます。遊びの開始ボタンを押すと水槽に戻ります。`;
     document.querySelectorAll<HTMLButtonElement>('[data-interaction-mode]').forEach(b => b.setAttribute('aria-pressed', String(!music && b.dataset.interactionMode === mode)));
     for (const [id, active] of [['friend-pet', !music && !inspecting && gentle], ['friend-follow', !music && !inspecting && followPointer]] as const) document.querySelector(`#${id}`)!.setAttribute('aria-pressed', String(active));
     document.querySelector('#mode-toggle')!.setAttribute('aria-label', `現在：${label}。操作モードを切り替える`);

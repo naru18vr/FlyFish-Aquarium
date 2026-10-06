@@ -63,3 +63,9 @@ body:not(.tank-view) .world-empty{position:relative;left:auto;top:auto;transform
 @media(max-width:600px) { .idle-summary-grid { grid-template-columns:1fr; } .idle-reward-heading button { width:100%; } .idle-overview { padding:12px; } }
 
 .idle-overview button { min-height:44px; padding:10px 14px; border:1px solid #a9c4ad; border-radius:7px; font-size:13px; }.idle-actions button { background:#e4eed8; color:#365740; }
+
+@media(max-width:600px) {
+  #play-notebook:has([data-play-panel="idle"]:not([hidden])) .play-tabs { display:flex; flex-wrap:nowrap; overflow-x:auto; padding-bottom:4px; }
+  #play-notebook:has([data-play-panel="idle"]:not([hidden])) .play-tabs button { flex:0 0 auto; min-width:74px; }
+  #play-notebook:has([data-play-panel="idle"]:not([hidden])) .play-mode-detail { display:none; }
+}

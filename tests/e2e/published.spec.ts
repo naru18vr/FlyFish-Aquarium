@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { GAME_KEY, JOURNAL } from '../../src/game';
 
 declare global { interface Window { __audioCapture: { context: AudioContext; stream: MediaStream; recorder?: MediaRecorder; chunks: Blob[] } } }
 
@@ -169,7 +170,7 @@ test('published retro music and fish effects produce recorded audio and can be m
 test('published idle dashboard receives offline rewards together and shows the next goal', async ({ page }, testInfo) => {
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto('./?tank&debug'); await page.waitForFunction(()=>window.__aquarium?.ready);
-  await page.evaluate(()=>{const s=window.__aquarium.idle.state;s.lastSeen=Date.now()-3600000;localStorage.setItem('flyfish-idle-v1',JSON.stringify(s));});
+  await page.evaluate(found=>{const a=window.__aquarium;a.game.state.found=found;localStorage.setItem('flyfish-play-v1',JSON.stringify(a.game.state));a.idle.state.lastSeen=Date.now()-3600000;localStorage.setItem('flyfish-idle-v1',JSON.stringify(a.idle.state));},JOURNAL.map(entry=>entry.id));
   await page.reload(); await page.waitForFunction(()=>window.__aquarium?.ready); await page.locator('#tank-pause').click(); await page.locator('#idle-open').click();
   const amount=await page.evaluate(()=>window.__aquarium.idle.rewards.shells),wallet=await page.evaluate(()=>window.__aquarium.game.state.shells);
   expect(amount).toBeGreaterThanOrEqual(18); await expect(page.locator('#idle-reward-total')).toHaveText('貝殻 '+amount+' 個');

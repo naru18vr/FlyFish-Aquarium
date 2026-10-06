@@ -22,7 +22,7 @@ export class IdleUI {
     document.querySelector('.play-tabs')!.insertAdjacentHTML('beforeend', '<button data-play-tab="idle" aria-pressed="false">おるすばん</button>');
     document.querySelector('.play-menu')!.insertAdjacentHTML('beforeend', '<button data-play-route="idle"><span aria-hidden="true">⌂</span><strong>おるすばんの水槽</strong><small>貝殻・お花・探検・卵・留守中の日記</small><b aria-hidden="true">→</b></button>');
     document.querySelector('#play-message')!.insertAdjacentHTML('beforebegin', `<section data-play-panel="idle" hidden>
-      <h3>待つ → 受け取る → 水槽を育てる</h3><p>遊んでいる間も、閉じている間も育ちます。閉じている間の進行は1回最大8時間。魚が死んだり、取り逃して損をしたりすることはありません。</p>
+      <h3>待つ → 受け取る → 水槽を育てる</h3><p>閉じても1回最大8時間ぶん育ちます。魚は死にません。貝殻を受け取って、お魚と水槽を育てよう。</p>
       <section id="idle-overview" class="idle-overview" aria-label="放置の成果と次の目標">
         <div class="idle-reward-heading"><div><span>いま受け取れる成果</span><strong id="idle-reward-total"></strong></div><button id="idle-claim-all">成果をまとめて受け取る</button></div>
         <p id="idle-reward-detail"></p>
