@@ -63,6 +63,6 @@ export class WorldUI {
     if (hotel.options.length !== hotelNames.length || hotelNames.some((name, i) => hotel.options[i].text !== name)) hotel.replaceChildren(...w.hotel.map(h => new Option(h.child.name, String(h.fish.id))));
     document.querySelector<HTMLButtonElement>('#world-hotel-return')!.disabled = !w.hotel.length || s.young.length + s.eggs.length >= 12;
     const mailKey = JSON.stringify([w.letters, w.read]);
-    if (mailKey !== this.mailKey) { this.mailKey = mailKey; document.querySelector('#world-mail')!.innerHTML = [...w.letters].reverse().slice(0, 12).map(l => `<div class="world-letter">${portrait(l.species, l.name, l.room === 2, l.shade)}<strong>${l.id > w.read ? '✦ 新しいお便り · ' : ''}${esc(l.name)}より</strong><p>${esc(l.text)}</p><small>${new Date(l.at).toLocaleString('ja-JP')} · ${esc(w.rooms[l.room].name)}</small></div>`).join('') || '<p>最初のお便りは30分ほどで届きます。</p>'; }
+    if (mailKey !== this.mailKey) { this.mailKey = mailKey; document.querySelector('#world-mail')!.innerHTML = [...w.letters].reverse().map(l => `<div class="world-letter">${portrait(l.species, l.name, l.room === 2, l.shade)}<strong>${l.id > w.read ? '✦ 新しいお便り · ' : ''}${esc(l.name)}より</strong><p>${esc(l.text)}</p><small>${new Date(l.at).toLocaleString('ja-JP')} · ${esc(w.rooms[l.room].name)}</small></div>`).join('') || '<p>最初のお便りは30分ほどで届きます。</p>'; }
   }
 }

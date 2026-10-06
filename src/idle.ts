@@ -35,7 +35,7 @@ const text = (v: unknown, fallback = '') => typeof v === 'string' ? v.slice(0, 1
 export function readIdleState(raw: unknown, now: number): IdleState {
   const s = obj(raw);
   const state: IdleState = { version: 1, epoch: now.toString(36) + Math.random().toString(36).slice(2, 8), lastSeen: now, total: 0, shells: 0, shellRemainder: 0, garden: 0, growth: 0, blooms: 0, level: 1, discoveries: 0,
-    journey: null, trips: 0, souvenirs: [], photos: [], eggs: [], young: [], nextEgg: 1200, serial: 0, fairy: false, fairyRemainder: 0, autoFeed: true, diary: [], welcome: null, grants: [], world: readWorld(null, 0) };
+    journey: null, trips: 0, souvenirs: [], photos: [], eggs: [], young: [], nextEgg: 1200, serial: 0, fairy: false, fairyRemainder: 0, autoFeed: true, diary: [], welcome: null, grants: [], world: readWorld(null, 0, now) };
   if (s.version !== 1) return state;
   if (typeof s.epoch === 'string' && /^[a-z0-9]{6,30}$/.test(s.epoch)) state.epoch = s.epoch;
   state.lastSeen = num(s.lastSeen, now, now); if (state.lastSeen <= 0) state.lastSeen = now;
@@ -62,7 +62,7 @@ export function readIdleState(raw: unknown, now: number): IdleState {
   if (s.welcome) state.welcome = { seconds: int(w.seconds, 0, OFFLINE_CAP), shells: int(w.shells, 0, 200), hatched: int(w.hatched, 0, 12) };
   state.grants = Array.isArray(s.grants) ? s.grants.slice(0, 12).map(raw => { const g = obj(raw); return { id: text(g.id), shells: int(g.shells, 0, 200), items: Array.isArray(g.items) ? g.items.filter((v): v is ShopId => ['pink', 'lavender', 'sunset', 'night', 'arch', 'star'].includes(v)).slice(0, 6) : [] }; }).filter(g => /^idle-[a-z0-9]{6,30}-[1-9][0-9]{0,9}$/.test(g.id)) : [];
   for (const g of state.grants) state.serial = Math.max(state.serial, +g.id.split('-').at(-1)!);
-  state.world = readWorld(s.world, state.total); state.world.room = Math.min(state.world.room, state.level - 1);
+  state.world = readWorld(s.world, state.total, now); state.world.room = Math.min(state.world.room, state.level - 1);
   if (!s.world) for (const p of state.photos) { const route = ROUTES.findIndex(r => r.name === p.place); if (route >= 0) state.world.map[route]++; }
   for (const c of Object.values(state.world.children)) c.room = Math.min(c.room, state.level - 1);
   state.world.hotel = state.world.hotel.filter(h => !seen.has(h.fish.id));

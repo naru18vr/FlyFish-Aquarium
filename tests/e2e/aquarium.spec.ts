@@ -20,7 +20,7 @@ test('grown named fish move between independently decorated tanks, rest at a hot
   await page.locator('[data-play-tab="decor"]').click(); await page.locator('[data-buy="shell"]').click();
   await page.locator('#play-close').click(); await page.waitForTimeout(300); await page.screenshot({ path: testInfo.outputPath('world-second-tank.png'), fullPage: true });
   await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
-  expect(await page.evaluate(() => window.__aquarium.idle.state.world.room)).toBe(1); expect(await page.evaluate(() => window.__aquarium.game.state.props.shell?.on)).toBe(true);
+  expect(await page.evaluate(() => window.__aquarium.idle.state.world.room)).toBe(1); expect(await page.evaluate(() => window.__aquarium.game.state.props.shell?.on)).toBe(true); expect(await page.evaluate(() => window.__aquarium.idle.state.world.letters.every(l => new Date(l.at).getFullYear() >= 2026))).toBe(true);
   await page.locator('#idle-open').click(); await expect(page.locator(`[data-child-name="${id}"] input`)).toHaveValue('ちびぽろん');
   await page.locator(`[data-child-hotel="${id}"]`).click(); await expect(page.locator('#world-hotel-fish')).toContainText('ちびぽろん');
   await page.locator('#world-hotel-return').click(); await expect(page.locator(`[data-child-name="${id}"] input`)).toHaveValue('ちびぽろん');

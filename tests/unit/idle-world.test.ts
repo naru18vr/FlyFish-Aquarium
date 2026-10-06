@@ -16,7 +16,7 @@ describe('growing idle world', () => {
     for (let id = 1; id <= 60; id++) advanceWorld(world, [{ id, species: 'goldfish', born: 0 }], 14400, 14400, NOW, 'test00', { fish: [], props: {} });
     expect(world.colors).toEqual(expect.arrayContaining(['goldfish:0', 'goldfish:1', 'goldfish:2', 'goldfish:3']));
     expect(world.children[60].stage).toBe(2); expect(stage(3599)).toBe(0); expect(stage(3600)).toBe(1); expect(stage(14400)).toBe(2);
-    const saved = readWorld(JSON.parse(JSON.stringify(world)), 14400); expect(saved.children).toEqual(world.children); expect(saved.colors).toEqual(world.colors);
+    const saved = readWorld(JSON.parse(JSON.stringify(world)), 14400); expect(saved.children).toEqual(world.children); expect(saved.colors).toEqual(world.colors); expect(saved.letters).toEqual(world.letters);
   });
   it('keeps named grown fish at the hotel and restores them without duplication', () => {
     const { idle } = setup(); idle.tick(NOW + 8 * 3600000, 14);

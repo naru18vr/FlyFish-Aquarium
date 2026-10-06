@@ -21,7 +21,7 @@ const number = (v: unknown, fallback = 0, max = 1e9) => typeof v === 'number' &&
 const integer = (v: unknown, fallback = 0, max = 1e9) => Math.floor(number(v, fallback, max));
 const name = (v: unknown, fallback: string) => typeof v === 'string' ? v.slice(0, 16).trim() || fallback : fallback;
 const place = (v: unknown): Place => typeof v === 'string' && Object.hasOwn(PLACES, v) ? v as Place : 'seaweed';
-export function readWorld(raw: unknown, total: number): WorldState {
+export function readWorld(raw: unknown, total: number, now = Date.now()): WorldState {
   const s = record(raw), crab = record(s.crab);
   const w: WorldState = { room: integer(s.room, 0, 2), rooms: ['はじめの水槽', '夕焼けの浅瀬', '星夜の水槽'].map((title, i) => ({ name: title, look: i ? { theme: i === 1 ? 'sunset' : 'night', plant: i === 1 ? 'pink' : 'green', rock: 'moss', props: {} } : null })), children: {}, colors: [], favorites: {}, crab: { bond: integer(crab.bond, 0, 30), pending: integer(crab.pending, 0, 100), remainder: number(crab.remainder, 0, 3599.999), nextGreeting: number(crab.nextGreeting, 0, total + 900) }, map: [0, 0, 0, 0], letters: [], serial: integer(s.serial), read: integer(s.read), nextLetter: number(s.nextLetter, total + 1800, total + 1800), hotel: [] };
   if (Array.isArray(s.rooms)) s.rooms.slice(0, 3).forEach((v, i) => {
@@ -38,7 +38,7 @@ export function readWorld(raw: unknown, total: number): WorldState {
   w.colors = Array.isArray(s.colors) ? [...new Set(s.colors.filter((v): v is string => typeof v === 'string' && FISH_SPECIES.some(f => [0, 1, 2, 3].some(c => v === `${f}:${c}`))))] : [];
   for (const [id, v] of Object.entries(record(s.favorites)).slice(0, 40)) { if (!/^[1-9][0-9]{0,8}$/.test(id)) continue; const f = record(v); w.favorites[id] = { place: place(f.place), affection: number(f.affection, 0, 100), announced: f.announced === true }; }
   if (Array.isArray(s.map)) w.map = [0, 1, 2, 3].map(i => integer((s.map as unknown[])[i], 0, 99999));
-  if (Array.isArray(s.letters)) w.letters = s.letters.slice(-30).map(v => { const l = record(v); return { id: integer(l.id), at: number(l.at), name: name(l.name, 'お魚'), text: typeof l.text === 'string' ? l.text.slice(0, 120) : '', species: FISH_SPECIES.includes(l.species as FishSpecies) ? l.species as FishSpecies : 'goldfish', shade: integer(l.shade, 0, 3), room: integer(l.room, 0, 2) }; });
+  if (Array.isArray(s.letters)) w.letters = s.letters.slice(-30).map(v => { const l = record(v); return { id: integer(l.id), at: number(l.at, now, now), name: name(l.name, 'お魚'), text: typeof l.text === 'string' ? l.text.slice(0, 120) : '', species: FISH_SPECIES.includes(l.species as FishSpecies) ? l.species as FishSpecies : 'goldfish', shade: integer(l.shade, 0, 3), room: integer(l.room, 0, 2) }; });
   w.serial = Math.max(w.serial, ...w.letters.map(l => l.id)); w.read = Math.min(w.read, w.serial);
   const seen = new Set<number>();
   if (Array.isArray(s.hotel)) for (const v of s.hotel.slice(0, 200)) {
