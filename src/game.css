@@ -5,3 +5,4 @@
 @media(max-height:480px){#play-notebook{max-height:94dvh}.music-hud{top:48px;padding:8px 10px;width:240px}.music-hud p{margin:5px 0}#music-sequence{margin-top:6px}.music-hud button{min-height:28px}}
 .music-hud{background:#163c43b3;pointer-events:none}.music-hud button{pointer-events:auto}.friend-card progress{appearance:none;-webkit-appearance:none;border:0;border-radius:6px;background:#dfe8d3;overflow:hidden}.play-header{position:sticky;top:-24px;background:#fafbf5;z-index:1;padding-top:6px}.play-header h2{padding-bottom:6px}
 @media(max-width:520px){.play-header{top:-18px}}
+.play-open:hover{color:#e0e9c8}.visitor-catch:hover{color:#f4deaf;background:#4e6163}

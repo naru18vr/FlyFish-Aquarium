@@ -252,15 +252,18 @@ export class AquariumRenderer {
     for (const [id, p] of Object.entries(this.game?.state.props ?? {})) {
       if (!p?.on) continue;
       const x = WIDTH * [.18, .5, .82][p.position] + (id === 'star' ? 25 : id === 'arch' ? -20 : 0), y = HEIGHT - 75;
+      // Keep ground decorations recognizable above the toolbar in tall tanks.
+      const scale = 1.6 * Math.max(1, Math.min(2.25, HEIGHT / WIDTH));
+      const rect = (dx: number, dy: number, w: number, h: number, color: string) => g.rect(x + dx * scale, y + dy * scale, w * scale, h * scale).fill(color);
       if (id === 'shell') {
-        g.rect(x - 22, y - 8, 44, 9).fill('#b58f8c'); g.rect(x - 18, y - 19, 36, 13).fill('#f0bdb0'); g.rect(x - 12, y - 26, 24, 10).fill('#f9d6bc');
-        g.rect(x - 7, y - 20, 14, 13).fill('#fff2cf'); g.rect(x - 4, y - 22, 8, 4).fill('#ffffff');
+        rect(-22, -8, 44, 9, '#b58f8c'); rect(-18, -19, 36, 13, '#f0bdb0'); rect(-12, -26, 24, 10, '#f9d6bc');
+        rect(-7, -20, 14, 13, '#fff2cf'); rect(-4, -22, 8, 4, '#ffffff');
       } else if (id === 'arch') {
-        g.rect(x - 37, y - 48, 16, 48).rect(x + 21, y - 48, 16, 48).rect(x - 28, y - 58, 56, 16).fill('#79a294');
-        g.rect(x - 21, y - 62, 42, 8).rect(x - 37, y - 48, 7, 35).fill('#b4ccb0');
+        rect(-37, -48, 16, 48, '#79a294'); rect(21, -48, 16, 48, '#79a294'); rect(-28, -58, 56, 16, '#79a294');
+        rect(-21, -62, 42, 8, '#b4ccb0'); rect(-37, -48, 7, 35, '#b4ccb0');
       } else {
-        g.rect(x - 4, y - 30, 8, 30).rect(x - 17, y - 21, 34, 8).rect(x - 11, y - 13, 22, 10).fill('#e3c585');
-        g.rect(x - 2, y - 24, 4, 18).rect(x - 11, y - 17, 22, 4).fill('#fff0b0');
+        rect(-4, -30, 8, 30, '#e3c585'); rect(-17, -21, 34, 8, '#e3c585'); rect(-11, -13, 22, 10, '#e3c585');
+        rect(-2, -24, 4, 18, '#fff0b0'); rect(-11, -17, 22, 4, '#fff0b0');
       }
     }
   }
