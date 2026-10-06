@@ -7,6 +7,25 @@ import type { IdleAquarium } from '../../src/idle';
 declare global { interface Window { __aquarium: { sim: Aquarium; youngPositions: { id: number; x: number; y: number }[]; game: AquariumGame; idle: IdleAquarium; demonstrating: boolean; audio: AudioSnapshot; width: number; height: number; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
 const pageErrors = new WeakMap<Page, string[]>();
 
+test('empty tanks explain where fish live and provide clear return and relocation actions', async ({ page }, testInfo) => {
+  await page.evaluate(() => { const a=window.__aquarium; a.idle.state.level=2; a.idle.state.total=600; a.idle.state.nextEgg=1200; localStorage.setItem('flyfish-idle-v1',JSON.stringify(a.idle.state)); });
+  await page.reload(); await page.waitForFunction(()=>window.__aquarium?.ready); await page.locator('#pause').click();
+  await page.locator('#world-location-open').click(); await page.locator('[data-room="1"]').click(); await page.locator('#play-close').click();
+  await expect(page.locator('#world-location-name')).toContainText('夕焼け'); await expect(page.locator('#world-location-count')).toHaveText('お魚 0匹');
+  await expect(page.locator('#metric-fish')).toHaveText('0'); await expect(page.locator('#world-empty')).toContainText('元からのお魚');
+  await page.locator('#tank-open').click(); await expect(page.locator('#world-empty')).toBeVisible();
+  await page.screenshot({path:testInfo.outputPath('clear-empty-tank.png')});
+  await page.locator('#world-empty [data-open-young]').click(); await expect(page.locator('#world-children')).toContainText('まだ育てた魚はいません');
+  await page.locator('#play-close').click(); await page.locator('#world-empty [data-return-home]').click();
+  await expect(page.locator('#world-empty')).toBeHidden(); await expect(page.locator('#world-room-open')).toContainText('24匹');
+  await page.locator('#idle-open').click(); await expect(page.locator('.idle-shortcuts')).toBeVisible();
+  await page.locator('[data-idle-jump="world-rooms"]').click(); await expect(page.locator('#world-room-summary')).toContainText('はじめの水槽');
+  await page.locator('#world-room-title').fill('お魚のおうち'); await page.locator('#world-room-name button').click();
+  await expect(page.locator('#ux-feedback')).toContainText('名前を保存'); await expect(page.locator('[data-room="0"]')).toContainText('お魚のおうち');
+  await page.locator('#play-close').click(); await page.reload(); await page.waitForFunction(()=>window.__aquarium?.ready);
+  await expect(page.locator('#world-room-open')).toContainText('お魚のおうち');
+});
+
 test('grown named fish move between independently decorated tanks, rest at a hotel and return', async ({ page }, testInfo) => {
   await page.evaluate(() => { const a = window.__aquarium; a.game.state.found = ['meal','school','escape','station','rest','friend','follow','song','decorate','fish-goldfish','fish-tetra','fish-angelfish','fish-puffer','fish-clownfish']; a.game.name(1, 'ぽろん'); a.idle.state.lastSeen = Date.now() - 8 * 3600000; localStorage.setItem('flyfish-idle-v1', JSON.stringify(a.idle.state)); });
   await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready); await page.locator('#pause').click();

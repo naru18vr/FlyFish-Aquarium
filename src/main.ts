@@ -47,7 +47,8 @@ const game = new AquariumGame(savedGame), play = new GameUI(game, sim);
 let savedIdle: unknown;
 try { savedIdle = JSON.parse(localStorage.getItem(IDLE_KEY) || 'null'); } catch { /* Optional storage. */ }
 const idle = new IdleAquarium(savedIdle), idleUI = new IdleUI(idle, game, sim, play);
-const worldUI = new WorldUI(idle, game, play);
+const worldUI = new WorldUI(idle, game, play, sim);
+ui.visibleFishCount=()=>idle.state.young.filter(f=>idle.state.world.children[f.id]?.room===idle.state.world.room).length+(idle.state.world.room===0?sim.fish.filter(f=>!idle.isAway(f.id)).length:0);
 const initialLook = idle.state.world.rooms[idle.state.world.room].look;
 if (initialLook) Object.assign(game.state, structuredClone(initialLook));
 else idle.captureLook(game.state);
@@ -192,7 +193,7 @@ function syncTankSize() {
 ui.onTankMode = () => {
   game.clearPointer();
   sim.selected = null; inspecting = false; ui.inspecting(false); ui.inspector(undefined, 0);
-  syncTankSize();
+  syncTankSize(); worldUI.refresh(true);
 };
 
 async function startBrain() {

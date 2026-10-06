@@ -2,6 +2,17 @@ import { expect, test, type Page } from '@playwright/test';
 
 declare global { interface Window { __audioCapture: { context: AudioContext; stream: MediaStream; recorder?: MediaRecorder; chunks: Blob[] } } }
 
+test('published empty tank explains residents and returns to the original fish', async ({ page }, testInfo) => {
+  await page.goto('./?tank&debug'); await page.waitForFunction(()=>window.__aquarium?.ready);
+  await page.evaluate(()=>{const a=window.__aquarium;a.idle.state.level=2;a.idle.state.total=600;a.idle.state.nextEgg=1200;localStorage.setItem('flyfish-idle-v1',JSON.stringify(a.idle.state));});
+  await page.reload(); await page.waitForFunction(()=>window.__aquarium?.ready); await page.locator('#tank-pause').click();
+  await page.locator('#idle-open').click(); await page.locator('[data-room="1"]').click(); await page.locator('#play-close').click();
+  await expect(page.locator('#world-empty')).toContainText('元からのお魚'); await expect(page.locator('#world-room-open')).toContainText('0匹');
+  await page.screenshot({path:testInfo.outputPath('published-clear-empty-tank.png')});
+  await page.locator('#world-empty [data-return-home]').click(); await expect(page.locator('#world-empty')).toBeHidden();
+  await expect.poll(()=>page.evaluate(()=>window.__aquarium.sim.fish.filter(f=>!window.__aquarium.sim.isAway(f)).length)).toBe(24);
+});
+
 test('published growing world names and relocates a grown fish and saves the selected tank', async ({ page }, testInfo) => {
   await page.goto('./?tank&debug'); await page.waitForFunction(() => window.__aquarium?.ready);
   await page.evaluate(() => { const a = window.__aquarium; a.game.state.found = ['meal','school','escape','station','rest','friend','follow','song','decorate','fish-goldfish','fish-tetra','fish-angelfish','fish-puffer','fish-clownfish']; a.game.name(1, 'ぽろん'); a.idle.state.lastSeen = Date.now() - 8 * 3600000; localStorage.setItem('flyfish-idle-v1', JSON.stringify(a.idle.state)); });
