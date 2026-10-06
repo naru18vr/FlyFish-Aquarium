@@ -9,7 +9,7 @@ const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt
 
 export class WorldUI {
   onRoom = (_room: number) => {};
-  private key = ''; private mailKey = ''; private colorKey = ''; private seen = -1;
+  private titleKey = ''; private key = ''; private mailKey = ''; private colorKey = ''; private seen = -1;
   constructor(private idle: IdleAquarium, private game: AquariumGame, private book: GameUI, private sim: Aquarium) {
     document.querySelector('.idle-diary')!.insertAdjacentHTML('beforebegin', `<div class="world-sections">
       <article><h4>🏝️ わたしの水槽たち</h4><p>Lv.2で夕焼けの浅瀬、Lv.3で星夜の水槽が増えます。最初の水槽には元からのお魚、どの水槽にも育てたお魚を引っ越せます。</p><p class="world-tip">水槽を替えても魚は元の水槽に残ります。新しい水槽は空からスタート。卵から育てた魚を引っ越して住まわせよう。</p><div id="world-rooms" class="world-room-buttons"></div><p id="world-room-summary" role="status"></p><button data-open-young>育てた魚を引っ越す ↓</button><form id="world-room-name"><label for="world-room-title">この水槽の名前</label><input id="world-room-title" maxlength="16"><button>名前を保存</button></form><p>「模様替え」の背景・海藻・飾りは水槽ごとに保存。育てたお魚の「引っ越し」で住む水槽を選べます。</p></article>
@@ -30,13 +30,13 @@ export class WorldUI {
     const routeSelect = document.querySelector<HTMLSelectElement>('#idle-trip-route')!;
     ROUTES.slice(2).forEach((r, i) => routeSelect.add(new Option(`${r.name} · ${r.seconds / 3600}時間 · 貝殻${r.shells}個`, String(i + 2))));
     document.querySelector('#world-rooms')!.addEventListener('click', event => { const b = (event.target as Element).closest<HTMLButtonElement>('[data-room]'); if (b) { this.onRoom(+b.dataset.room!); this.refresh(true); } });
-    document.querySelector<HTMLFormElement>('#world-room-name')!.onsubmit = event => { event.preventDefault(); idle.nameRoom(idle.state.world.room, document.querySelector<HTMLInputElement>('#world-room-title')!.value); this.feedback('水槽の名前を保存しました。'); this.refresh(true); };
+    document.querySelector<HTMLFormElement>('#world-room-name')!.onsubmit = event => { event.preventDefault(); idle.nameRoom(idle.state.world.room, document.querySelector<HTMLInputElement>('#world-room-title')!.value); document.querySelector<HTMLInputElement>('#world-room-title')!.value=idle.state.world.rooms[idle.state.world.room].name; this.feedback('水槽の名前を保存しました。'); this.refresh(true); };
     document.querySelector<HTMLButtonElement>('#world-crab-greet')!.onclick = () => { if(idle.greetCrab())this.feedback('カニにあいさつしました。仲良し度が1上がったよ。'); this.refresh(true); };
     document.querySelector<HTMLButtonElement>('#world-crab-collect')!.onclick = () => { const amount=idle.state.world.crab.pending; if(idle.collectCrab())this.feedback(`お店番の貝殻${amount}個を受け取りました。`); this.refresh(true); };
     document.querySelector<HTMLButtonElement>('#world-mail-read')!.onclick = () => { idle.readLetters(); this.refresh(true); };
     document.querySelector<HTMLButtonElement>('#world-hotel-return')!.onclick = () => { if(idle.restoreChild(+document.querySelector<HTMLSelectElement>('#world-hotel-fish')!.value))this.feedback('ホテルから元の住む水槽へ戻りました。魚のカードで場所を確認できます。'); this.refresh(true); };
     document.querySelector('#world-children')!.addEventListener('click', event => { const b = (event.target as Element).closest<HTMLButtonElement>('[data-child-hotel]'); if (b) { idle.hotelChild(+b.dataset.childHotel!); this.feedback('ホテルでお休み中です。下の「水槽へ戻す」でいつでも戻せます。'); this.refresh(true); } });
-    document.querySelector('#world-children')!.addEventListener('submit', event => { event.preventDefault(); const form = event.target as HTMLFormElement; idle.nameChild(+form.dataset.childName!, form.querySelector<HTMLInputElement>('input')!.value); this.feedback('お魚の名前を保存しました。'); this.refresh(true); });
+    document.querySelector('#world-children')!.addEventListener('submit', event => { event.preventDefault(); const form = event.target as HTMLFormElement; idle.nameChild(+form.dataset.childName!, form.querySelector<HTMLInputElement>('input')!.value); form.querySelector<HTMLInputElement>('input')!.value=idle.state.world.children[+form.dataset.childName!].name; this.feedback('お魚の名前を保存しました。'); this.refresh(true); });
     document.querySelector('#world-children')!.addEventListener('change', event => { const input = event.target as HTMLSelectElement; if (input.dataset.childRoom) { idle.moveChild(+input.dataset.childRoom, +input.value); this.feedback(`${idle.state.world.children[+input.dataset.childRoom].name}は${idle.state.world.rooms[+input.value].name}に住んでいます。水槽を選び替えると会えます。`); this.refresh(true); } });
     document.querySelector('#play-notebook')!.addEventListener('click', () => this.refresh(true));
     this.refresh(true);
@@ -61,7 +61,7 @@ export class WorldUI {
     this.seen = this.idle.revision;
     document.querySelector('#world-rooms')!.innerHTML = w.rooms.map((r, i) => `<button data-room="${i}" aria-pressed="${i === w.room}" ${i >= s.level ? 'disabled' : ''}>${esc(r.name)} · ${i>=s.level?'準備中':`${counts[i]}匹`} ${i === w.room ? '✓ 表示中' : i >= s.level ? `· Lv.${i + 1}で解放` : 'へ移動'}</button>`).join('');
     document.querySelector('#world-room-summary')!.textContent=`今は「${w.rooms[w.room].name}」を表示中。お魚${count}匹。${w.room>0&&!count?'育てた魚の住む水槽を変更すると、ここに泳ぎます。':''}`;
-    const title = document.querySelector<HTMLInputElement>('#world-room-title')!; if (document.activeElement !== title) title.value = w.rooms[w.room].name;
+    const title = document.querySelector<HTMLInputElement>('#world-room-title')!, titleKey=JSON.stringify([w.room,w.rooms[w.room].name]); if(this.titleKey!==titleKey){this.titleKey=titleKey;title.value=w.rooms[w.room].name;}
     const rate = w.crab.bond >= 15 ? 6 : w.crab.bond >= 5 ? 4 : 2;
     document.querySelector('#world-crab-status')!.textContent = `仲良し度 ${w.crab.bond}/30 · 1時間に${rate}個 · お預かり ${w.crab.pending}/100個。${w.crab.bond < 5 ? '5で1時間に4個' : w.crab.bond < 15 ? '15で1時間に6個' : '頼れるお店番！'}`;
     const greet = document.querySelector<HTMLButtonElement>('#world-crab-greet')!; greet.disabled = s.total < w.crab.nextGreeting || w.crab.bond >= 30; greet.textContent = s.total < w.crab.nextGreeting ? `あいさつまであと${Math.ceil((w.crab.nextGreeting - s.total) / 60)}分` : 'カニにあいさつ';
