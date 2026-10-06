@@ -546,6 +546,8 @@ test('blocked connectome gives an explicit program fallback', async ({ page }) =
   await expect(page.locator('#brain-status')).toContainText('Program');
   await expect(page.locator('#metric-brain')).toHaveText('0%');
   await page.locator('[data-preset=".9"]').click(); await expect(page.locator('#metric-brain')).toHaveText('0%');
+  await expect(page.locator('#toast')).toContainText('ページを更新');
+  await expect(page.locator('#brain-mode-status')).toContainText('プログラム · ハエ脳0%');
 });
 
 test('keyboard selection, stimulation, feeding and inspection are accessible', async ({ page }) => {

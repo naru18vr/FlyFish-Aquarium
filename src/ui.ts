@@ -70,7 +70,7 @@ export class UI {
       const input = document.getElementById(key) as HTMLInputElement;
       this.onSetting(key, Math.min(+input.max, Math.max(+input.min, this.settings[key] + +(button.dataset.delta!)))); this.sync();
     });
-    document.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach(button => button.onclick = () => { this.onSetting('flyWeight', +button.dataset.preset!); this.sync(); this.toast(`反映しました：${this.settingsModeLabel()}`); });
+    document.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach(button => button.onclick = () => { const requested = +button.dataset.preset!; this.onSetting('flyWeight', requested); this.sync(); if (this.settings.flyWeight === requested) this.toast(`反映しました：${this.settingsModeLabel()}`); });
     document.querySelector<HTMLButtonElement>('#predator-mix')!.onclick = () => { this.onSetting('predatorKind', 'mixed'); this.onSetting('predators', Math.max(3, this.settings.predators)); this.sync(); this.toast('サメ・クラゲ・イカが登場！'); };
     document.querySelector<HTMLButtonElement>('#pause')!.onclick = () => this.onPause();
     document.querySelector<HTMLButtonElement>('#reset')!.onclick = () => this.onReset();
