@@ -5,9 +5,9 @@ import type { GameUI } from './game-ui';
 import { FISH_PROFILES, type FishSpecies } from './species';
 
 const escape = (text: string) => text.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
-function portrait(species: FishSpecies, name: string, night: boolean) {
+export function portrait(species: FishSpecies, name: string, night: boolean, shade = 0) {
   const pattern = FISH_PROFILES[species].pattern, width = Math.max(...pattern.map(row => row.length));
-  const colors: Record<string, string> = { a: '#bf8653', b: '#efb969', c: '#ffe5aa', d: '#fff9df', w: '#fffce7', e: '#173c3d' };
+  const colors: Record<string, string> = { a: ['#bf8653', '#a6a3c1', '#c87689', '#5a9e90'][shade], b: ['#efb969', '#d4d1ef', '#f6b1bd', '#9ed8bd'][shade], c: '#ffe5aa', d: '#fff9df', w: '#fffce7', e: '#173c3d' };
   const pixels = pattern.flatMap((row, y) => [...row].flatMap((p, x) => colors[p] ? [`<rect x="${x}" y="${y}" width="1" height="1" fill="${colors[p]}"/>`] : [])).join('');
   return `<svg viewBox="0 0 40 30" role="img" aria-label="${escape(name)}の探検写真" shape-rendering="crispEdges"><rect width="40" height="30" fill="${night ? '#394971' : '#47928e'}"/><rect y="25" width="40" height="5" fill="#a1b98c"/><rect x="4" y="19" width="2" height="7" fill="#80b890"/><rect x="31" y="17" width="2" height="9" fill="#80b890"/>${night ? '<rect x="7" y="5" width="2" height="2" fill="#f3dcaa"/><rect x="32" y="8" width="1" height="1" fill="#f3dcaa"/>' : '<rect x="3" y="4" width="2" height="2" fill="#b9e8cf"/>'}<g transform="translate(${(40 - width) / 2},${(25 - pattern.length) / 2})">${pixels}</g></svg>`;
 }
@@ -79,8 +79,8 @@ export class IdleUI {
     if (select.options.length !== options.length || options.some((o, i) => select.options[i]?.textContent !== o.name)) select.replaceChildren(...options.map(o => new Option(o.name, o.value)));
     select.value = String(this.picked);
     const route = +document.querySelector<HTMLSelectElement>('#idle-trip-route')!.value, r = ROUTES[route];
-    const bond = this.game.friend(this.picked).bond, locked = s.level < r.level;
-    set('idle-trip-help', locked ? `水槽Lv.${r.level}で行けるようになります。` : bond < r.bond ? `仲良し度があと${r.bond - bond}必要です。「なかよし」でなでるか、餌をあげよう。` : '準備できたよ。帰ったら水槽に戻り、お土産と写真を持ってきます。');
+    const bond = this.game.friend(this.picked).bond, locked = !this.idle.routeAvailable(route);
+    set('idle-trip-help', locked ? `水槽Lv.${r.level}と探検地図の条件が必要です。下の「探検地図」を見てね。` : bond < r.bond ? `仲良し度があと${r.bond - bond}必要です。「なかよし」でなでるか、餌をあげよう。` : '準備できたよ。帰ったら水槽に戻り、お土産と写真を持ってきます。');
     button('idle-trip-start', locked || bond < r.bond || !fish.length);
     document.querySelector<HTMLElement>('#idle-trip-picker')!.hidden = !!s.journey;
     document.querySelector<HTMLElement>('#idle-trip-active')!.hidden = !s.journey;
@@ -96,7 +96,7 @@ export class IdleUI {
       this.photoKey = photoKey;
       document.querySelector('#idle-photos')!.innerHTML = s.photos.slice(-6).map(p => `<div>${portrait(p.species, p.name, p.place === ROUTES[1].name)}<strong>${escape(p.name)}</strong><small>${escape(p.place)} · ${FISH_PROFILES[p.species].name}</small></div>`).join('');
     }
-    document.querySelector('#idle-nursery')!.innerHTML = `${s.eggs.map(e => `<p>🥚 ${FISH_PROFILES[e.species].name}の卵 · 孵化${duration(1800 - (s.total - e.born))}</p>`).join('')}<p>泳いでいる稚魚：${s.young.length}匹</p>${s.young.length ? `<div class="idle-young-list">${s.young.map(f => `<span>🐟 ${FISH_PROFILES[f.species].name}</span>`).join('')}</div>` : s.eggs.length ? '' : `<p>次の卵${duration(s.nextEgg - s.total)}。のんびり待とう。</p>`}`;
+    document.querySelector('#idle-nursery')!.innerHTML = `${s.eggs.map(e => `<p>🥚 ${FISH_PROFILES[e.species].name}の卵 · 孵化${duration(1800 - (s.total - e.born))}</p>`).join('')}<p>育てているお魚：${s.young.length}匹</p>${s.young.length ? `<div class="idle-young-list">${s.young.map(f => `<span>🐟 ${FISH_PROFILES[f.species].name}</span>`).join('')}</div>` : s.eggs.length ? '' : `<p>次の卵${duration(s.nextEgg - s.total)}。のんびり待とう。</p>`}`;
     set('idle-level', `水槽 Lv.${s.level} · 図鑑 ${s.discoveries}/14`);
     const thresholds = [0, 600, 3600, 14400], next = thresholds[s.level] ?? 14400;
     const levelProgress = document.querySelector<HTMLProgressElement>('#idle-level-progress')!; levelProgress.max = next; levelProgress.value = Math.min(next, s.total);

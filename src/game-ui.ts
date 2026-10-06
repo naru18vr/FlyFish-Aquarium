@@ -11,6 +11,7 @@ export class GameUI {
   onCall = (_id: number) => {};
   onClose = () => {};
   onMusicStart = () => {};
+  awayMessage = () => 'この魚は探検中です。「おるすばん」で帰りを確認できます。';
   private dialog: HTMLDialogElement;
   private tab = 'home'; private picked = 1; private fishKey = ''; private seenRevision = -1;
   private demonstrating = false;
@@ -112,7 +113,7 @@ export class GameUI {
     for (const i of [0, 1, 2]) {
       const missing = PHRASES[i].notes.some(n => !this.sim.fish.some(f => !this.sim.isAway(f) && degreeOf(f.id) === n));
       document.querySelector<HTMLButtonElement>(`[data-start-phrase="${i}"]`)!.disabled = missing;
-      document.querySelector(`#song-done-${i}`)!.textContent = missing ? 'この音の魚は探検中。帰りを待つか、魚を増やしてね。' : state.songs.includes(i) ? '✓ 演奏できた' : '';
+      document.querySelector(`#song-done-${i}`)!.textContent = missing ? 'この水槽に必要な音の魚がいません。最初の水槽へ戻るか、探検の帰りを待ってね。' : state.songs.includes(i) ? '✓ 演奏できた' : '';
     }
     document.querySelector('#journal-count')!.textContent = `${state.found.length} / ${JOURNAL.length} の発見`;
     document.querySelector('#journal-list')!.innerHTML = JOURNAL.map(j => `<article class="journal-entry ${state.found.includes(j.id) ? 'found' : ''}" data-discovery="${j.id}"><span>${state.found.includes(j.id) ? '✦' : '○'}</span><h4>${j.name}</h4><p>${j.hint}</p><small>${state.found.includes(j.id) ? '発見済み' : 'まだ見つけていない'}</small></article>`).join('');
@@ -143,6 +144,6 @@ export class GameUI {
     const away = !!fish && this.sim.isAway(fish);
     document.querySelector<HTMLButtonElement>('#friend-call')!.disabled = f.bond < 8 || away;
     document.querySelector<HTMLButtonElement>('#friend-watch')!.disabled = away;
-    document.querySelector('#friend-call-hint')!.textContent = away ? 'この魚は探検中です。「おるすばん」で帰りを確認できます。' : f.bond < 8 ? `あと ${8 - f.bond} 仲良し度で呼べます。なでるか、餌をあげよう。` : '呼ぶと、この魚と仲良しの魚が水槽の中央に寄ってきます。';
+    document.querySelector('#friend-call-hint')!.textContent = away ? this.awayMessage() : f.bond < 8 ? `あと ${8 - f.bond} 仲良し度で呼べます。なでるか、餌をあげよう。` : '呼ぶと、この魚と仲良しの魚が水槽の中央に寄ってきます。';
   }
 }

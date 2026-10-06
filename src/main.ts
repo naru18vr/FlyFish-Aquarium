@@ -13,6 +13,8 @@ import { GameUI } from './game-ui';
 import { IdleAquarium, IDLE_KEY } from './idle';
 import { IdleUI } from './idle-ui';
 import { ModeUI } from './mode-ui';
+import { WorldUI } from './world-ui';
+import { PLACES, stage, STAGES } from './idle-world';
 import { distance, safePosition } from './math';
 
 // Preserve only recognized, bounded values. Storage may be unavailable in private mode.
@@ -45,6 +47,11 @@ const game = new AquariumGame(savedGame), play = new GameUI(game, sim);
 let savedIdle: unknown;
 try { savedIdle = JSON.parse(localStorage.getItem(IDLE_KEY) || 'null'); } catch { /* Optional storage. */ }
 const idle = new IdleAquarium(savedIdle), idleUI = new IdleUI(idle, game, sim, play);
+const worldUI = new WorldUI(idle, game, play);
+const initialLook = idle.state.world.rooms[idle.state.world.room].look;
+if (initialLook) Object.assign(game.state, structuredClone(initialLook));
+else idle.captureLook(game.state);
+idle.context = () => ({ fish: sim.fish.map(f => ({ id: f.id, species: f.species, name: game.friend(f.id).name || `お魚 #${f.id}` })), props: idle.state.world.rooms[0].look?.props ?? {} });
 const modes = new ModeUI(game, ui);
 let lastAway = idle.state.journey?.fishId ?? null;
 idle.onChange = () => {
@@ -52,19 +59,27 @@ idle.onChange = () => {
   if (away !== lastAway) { lastAway = away; play.refresh(true); }
   try { localStorage.setItem(IDLE_KEY, JSON.stringify(idle.state)); } catch { play.storageUnavailable(); } };
 idle.onGrant = grant => game.receiveIdle(grant);
-sim.isAway = fish => idle.isAway(fish.id);
+sim.isAway = fish => idle.state.world.room !== 0 || idle.isAway(fish.id);
+play.awayMessage = () => idle.state.world.room ? 'この魚は最初の水槽にいます。「おるすばん」の水槽たちから戻れます。' : 'この魚は探検中です。「おるすばん」で帰りを確認できます。';
 renderer.idle = idle; play.refresh(true);
 play.onMusicStart = () => { inspecting = false; sim.selected = null; ui.inspecting(false); ui.inspector(undefined, 0); ui.tankMode(true); };
 renderer.game = game;
 game.onNotice = message => { ui.toast(message); play.message(message); };
-game.onChange = () => { try { localStorage.setItem(GAME_KEY, JSON.stringify(game.state)); } catch { play.storageUnavailable(); } };
+game.onChange = () => { idle.captureLook(game.state); try { localStorage.setItem(GAME_KEY, JSON.stringify(game.state)); } catch { play.storageUnavailable(); } };
 sim.onEat = (fish, manual) => game.meal(fish, manual);
-idle.tick(Date.now(), game.state.found.length); idle.flushGrants(); idle.onChange(); idleUI.refresh(true);
-sim.companion = fish => inspecting ? null : game.followTarget(fish);
+idle.tick(Date.now(), game.state.found.length); idle.flushGrants(); idle.onChange(); idleUI.refresh(true); worldUI.refresh(true);
+sim.companion = fish => {
+  if (inspecting || game.phrase || fish.fear > .2 || fish.startleLeft + fish.startleRight > .03) return null;
+  const follow = game.followTarget(fish); if (follow) return follow;
+  const favorite = idle.state.world.favorites[fish.id];
+  if (!favorite || favorite.affection < 1 || (sim.time + fish.id * 3) % 40 < 28) return null;
+  const p = game.state.props[favorite.place as 'shell' | 'arch' | 'star'];
+  return safePosition({ x: p?.on ? WIDTH * [.18, .5, .82][p.position] : WIDTH * .46, y: HEIGHT - 170 }, sim.activeRocks());
+};
 play.onFeed = () => ui.onFeed();
 play.onCall = id => {
   const fish = sim.fish.find(f => f.id === id);
-  if (!fish || idle.isAway(id) || game.friend(id).bond < 8) return;
+  if (!fish || sim.isAway(fish) || game.friend(id).bond < 8) return;
   game.callFriends(safePosition({ x: WIDTH * .5, y: HEIGHT * .45 }, sim.activeRocks()));
   renderer.effect(game.call!, 'heart'); ui.toast('こっちにおいで。仲良しの魚に声をかけました');
 };
@@ -111,6 +126,12 @@ const playFish = (id: number, point: { x: number; y: number }) => {
   void sound.fish(id, point.x / WIDTH * 1.4 - .7).then(note => { if (note) renderer.effect(position, 'note', note.midi); });
 };
 let paused = false, inspecting = false, ready = false, busy = false, workerMs = 0, brainTime = 0;
+worldUI.onRoom = room => {
+  idle.captureLook(game.state); if (!idle.selectRoom(room)) return;
+  const look = idle.state.world.rooms[room].look; if (look) Object.assign(game.state, structuredClone(look));
+  game.stopPhrase(); game.call = null; game.clearPointer(); play.onClose(); sim.selected = null; inspecting = false; ui.inspecting(false); ui.inspector(undefined, 0);
+  game.onChange(); play.refresh(true); worldUI.refresh(true); ui.toast(`${idle.state.world.rooms[room].name}へ移動しました`);
+};
 modes.onSelect = mode => {
   game.stopPhrase(); game.call = null; game.clearPointer(); play.onClose(); sim.selected = null;
   const gentle = mode === 'pet', follow = mode === 'follow';
@@ -229,6 +250,16 @@ async function start() {
     const visitor = game.visitorPoint(WIDTH, HEIGHT, settings.rocks);
     if (!event.shiftKey && !inspecting && visitor && distance(point, visitor) < 32) { game.collectVisitor(); void sound.feed(); play.refresh(true); return; }
     const tapped = sim.pick(point);
+    const child = renderer.youngAt(point);
+    if (child && !tapped && !game.phrase) {
+      const c = idle.state.world.children[child.id];
+      if (!inspecting && !event.shiftKey) {
+        playFish(child.id + 1000, point);
+        if (!game.state.gentle && settings.scare) { renderer.scareYoung(child.id, point); renderer.effect(point, 'scare'); }
+        else { idle.petChild(child.id); renderer.effect(point, 'heart'); }
+      }
+      ui.toast(`${c.name} · ${STAGES[stage(idle.state.total - child.born)]} · お気に入りは${PLACES[c.favorite]}`); worldUI.refresh(true); return;
+    }
     if (tapped && !event.shiftKey && !inspecting) playFish(tapped.id, point);
     const gentle = tapped && !event.shiftKey && !inspecting && (game.state.gentle || game.phrase);
     if (tapped && gentle) { if (game.pet(tapped.id)) renderer.effect(tapped, 'heart'); sim.selected = tapped.id; }
@@ -280,7 +311,7 @@ async function start() {
     const elapsed = (now - last) / 1000; last = now;
     const dt = Math.min(elapsed, .1);
     idleTime += elapsed;
-    if (idleTime >= 1) { idleTime = 0; idle.tick(Date.now(), game.state.found.length); idleUI.refresh(); }
+    if (idleTime >= 1) { idleTime = 0; idle.tick(Date.now(), game.state.found.length); idleUI.refresh(); worldUI.refresh(); }
     if (sim.time < lastAutoFeed) lastAutoFeed = sim.time;
     if (!paused && !document.hidden && idle.state.autoFeed && sim.time - lastAutoFeed >= 45) {
       lastAutoFeed = sim.time;
@@ -289,7 +320,12 @@ async function start() {
     if (!paused && !document.hidden) {
       accumulator += dt;
       const hour = new Date().getHours();
-      while (accumulator >= 1 / 60) { sim.update(1 / 60); game.update(1 / 60, idle.state.journey ? sim.fish.filter(f => !idle.isAway(f.id)) : sim.fish, sim.stations, hour); accumulator -= 1 / 60; brainTime += 1 / 60; }
+      while (accumulator >= 1 / 60) {
+        sim.update(1 / 60);
+        sim.food = sim.food.filter(food => { const child = renderer.youngAt(food); if (!child) return true; idle.petChild(child.id); renderer.effect(food, 'heart'); return false; });
+        game.update(1 / 60, idle.state.journey || idle.state.world.room ? sim.fish.filter(f => !sim.isAway(f)) : sim.fish, sim.stations, hour);
+        accumulator -= 1 / 60; brainTime += 1 / 60;
+      }
       if (ready && !busy && brainTime >= 1 / QUALITY[settings.quality].hz) {
         brainTime %= 1 / QUALITY[settings.quality].hz; busy = true;
         send({ type: 'tick', revision, fish: sim.fish.map(f => ({ id: f.id, sensory: f.sensory, noise: .1 + (f.traits.brainNoise + 1) * settings.variation * .2 })) });
@@ -305,7 +341,7 @@ async function start() {
   requestAnimationFrame(frame);
   // Read-only diagnostics are opt-in and never run neural computation on main.
   if (new URLSearchParams(location.search).has('debug')) {
-    Object.defineProperty(window, '__aquarium', { value: { sim, game, idle, get demonstrating() { return demonstrating; }, get audio() { return sound.snapshot; }, get width() { return WIDTH; }, get height() { return HEIGHT; }, get ready() { return ready; }, get workerMs() { return workerMs; }, get paused() { return paused; }, get brainFailed() { return brainFailed; } } });
+    Object.defineProperty(window, '__aquarium', { value: { sim, game, idle, get youngPositions() { return renderer.youngPositions(); }, get demonstrating() { return demonstrating; }, get audio() { return sound.snapshot; }, get width() { return WIDTH; }, get height() { return HEIGHT; }, get ready() { return ready; }, get workerMs() { return workerMs; }, get paused() { return paused; }, get brainFailed() { return brainFailed; } } });
     (document.querySelector('#debug-toggle') as HTMLInputElement).checked = true;
   }
   if (new URLSearchParams(location.search).has('tank')) ui.tankMode(true);

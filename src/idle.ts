@@ -1,5 +1,6 @@
 import { FISH_SPECIES, type FishSpecies } from './species';
 import type { ShopId } from './game';
+import { addLetter, advanceWorld, readWorld, type Look, type WorldContext, type WorldState } from './idle-world';
 
 export const IDLE_KEY = 'flyfish-idle-v1';
 export const OFFLINE_CAP = 8 * 3600;
@@ -7,6 +8,8 @@ export const GARDENS = ['みどりの海藻', '桃色のお花', '星の海藻']
 export const ROUTES = [
   { name: '浅瀬のおさんぽ', seconds: 3600, shells: 12, bond: 8, level: 1 },
   { name: '星砂の入り江', seconds: 10800, shells: 30, bond: 24, level: 3 },
+  { name: '珊瑚の迷路', seconds: 21600, shells: 50, bond: 60, level: 3 },
+  { name: 'オーロラの海', seconds: 28800, shells: 80, bond: 60, level: 4 },
 ] as const;
 const SOUVENIRS = ['真珠のかけら', '珊瑚のかけら', '星砂の小瓶'] as const;
 export interface YoungFish { id: number; species: FishSpecies; born: number }
@@ -22,6 +25,7 @@ export interface IdleState {
   diary: { id: number; at: number; text: string }[];
   welcome: { seconds: number; shells: number; hatched: number } | null;
   grants: Grant[];
+  world: WorldState;
 }
 const obj = (v: unknown): Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
 const num = (v: unknown, fallback: number, max: number) => typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(max, v)) : fallback;
@@ -31,7 +35,7 @@ const text = (v: unknown, fallback = '') => typeof v === 'string' ? v.slice(0, 1
 export function readIdleState(raw: unknown, now: number): IdleState {
   const s = obj(raw);
   const state: IdleState = { version: 1, epoch: now.toString(36) + Math.random().toString(36).slice(2, 8), lastSeen: now, total: 0, shells: 0, shellRemainder: 0, garden: 0, growth: 0, blooms: 0, level: 1, discoveries: 0,
-    journey: null, trips: 0, souvenirs: [], photos: [], eggs: [], young: [], nextEgg: 1200, serial: 0, fairy: false, fairyRemainder: 0, autoFeed: true, diary: [], welcome: null, grants: [] };
+    journey: null, trips: 0, souvenirs: [], photos: [], eggs: [], young: [], nextEgg: 1200, serial: 0, fairy: false, fairyRemainder: 0, autoFeed: true, diary: [], welcome: null, grants: [], world: readWorld(null, 0) };
   if (s.version !== 1) return state;
   if (typeof s.epoch === 'string' && /^[a-z0-9]{6,30}$/.test(s.epoch)) state.epoch = s.epoch;
   state.lastSeen = num(s.lastSeen, now, now); if (state.lastSeen <= 0) state.lastSeen = now;
@@ -47,7 +51,7 @@ export function readIdleState(raw: unknown, now: number): IdleState {
   state.young = state.young.filter(a => !seen.has(a.id) && !!seen.add(a.id)); state.eggs = state.eggs.filter(a => !seen.has(a.id) && !!seen.add(a.id));
   state.serial = Math.max(state.serial, ...seen);
   if (s.journey && typeof s.journey === 'object') {
-    const j = obj(s.journey), route = int(j.route, 0, 1), fishId = int(j.fishId, 0, 999999999);
+    const j = obj(s.journey), route = int(j.route, 0, 3), fishId = int(j.fishId, 0, 999999999);
     if (fishId > 0) state.journey = { fishId, name: text(j.name).slice(0, 16), species: species(j.species), route, elapsed: num(j.elapsed, 0, ROUTES[route].seconds), recorded: j.recorded === true };
   }
   state.souvenirs = Array.isArray(s.souvenirs) ? [...new Set(s.souvenirs.filter((v): v is string => SOUVENIRS.includes(v as typeof SOUVENIRS[number])))] : [];
@@ -58,6 +62,11 @@ export function readIdleState(raw: unknown, now: number): IdleState {
   if (s.welcome) state.welcome = { seconds: int(w.seconds, 0, OFFLINE_CAP), shells: int(w.shells, 0, 200), hatched: int(w.hatched, 0, 12) };
   state.grants = Array.isArray(s.grants) ? s.grants.slice(0, 12).map(raw => { const g = obj(raw); return { id: text(g.id), shells: int(g.shells, 0, 200), items: Array.isArray(g.items) ? g.items.filter((v): v is ShopId => ['pink', 'lavender', 'sunset', 'night', 'arch', 'star'].includes(v)).slice(0, 6) : [] }; }).filter(g => /^idle-[a-z0-9]{6,30}-[1-9][0-9]{0,9}$/.test(g.id)) : [];
   for (const g of state.grants) state.serial = Math.max(state.serial, +g.id.split('-').at(-1)!);
+  state.world = readWorld(s.world, state.total); state.world.room = Math.min(state.world.room, state.level - 1);
+  if (!s.world) for (const p of state.photos) { const route = ROUTES.findIndex(r => r.name === p.place); if (route >= 0) state.world.map[route]++; }
+  for (const c of Object.values(state.world.children)) c.room = Math.min(c.room, state.level - 1);
+  state.world.hotel = state.world.hotel.filter(h => !seen.has(h.fish.id));
+  state.serial = Math.max(state.serial, ...state.world.hotel.map(h => h.fish.id));
   return state;
 }
 
@@ -66,6 +75,7 @@ export class IdleAquarium {
   revision = 0;
   onChange = () => {};
   onGrant: (grant: Grant) => boolean = () => false;
+  context: () => WorldContext = () => ({ fish: [], props: {} });
   constructor(raw?: unknown, now = Date.now()) { this.state = readIdleState(raw, now); }
   private changed() { this.revision++; this.onChange(); }
   private log(message: string, now: number) {
@@ -125,6 +135,7 @@ export class IdleAquarium {
       if (s.fairyRemainder >= 1800) { s.fairyRemainder %= 1800; if (!s.fairy) { s.fairy = true; this.log('貝の妖精が遊びに来た。いつでもお迎えしてね。', now); } }
     }
     if (elapsed >= 60) s.welcome = { seconds: Math.floor(elapsed), shells: s.shells - oldShells, hatched: s.young.length - oldYoung };
+    advanceWorld(s.world, s.young, s.total, elapsed, now, s.epoch, this.context());
     this.changed(); this.flushGrants(); return elapsed;
   }
   collectShells() { const amount = this.state.shells; if (!amount) return false; this.state.shells = 0; this.grant(amount); return true; }
@@ -137,7 +148,7 @@ export class IdleAquarium {
   garden(index: number) { if (Number.isInteger(index) && index >= 0 && index < Math.min(3, this.state.level)) { this.state.garden = index; this.changed(); } }
   startJourney(fish: { id: number; species: FishSpecies }, name: string, bond: number, route: number, now = Date.now()) {
     const r = ROUTES[route];
-    if (!r || !Number.isInteger(route) || this.state.journey || !Number.isFinite(bond) || bond < r.bond || this.state.level < r.level || !Number.isSafeInteger(fish.id) || fish.id < 1) return false;
+    if (!r || !Number.isInteger(route) || !this.routeAvailable(route) || this.state.journey || !Number.isFinite(bond) || bond < r.bond || !Number.isSafeInteger(fish.id) || fish.id < 1) return false;
     this.state.journey = { fishId: fish.id, species: species(fish.species), name: name.slice(0, 16), route, elapsed: 0, recorded: false };
     this.log(`${name || 'お魚'}が${r.name}へ出発した。`, now); this.changed(); return true;
   }
@@ -145,10 +156,31 @@ export class IdleAquarium {
     const j = this.state.journey; if (!j || j.elapsed < ROUTES[j.route].seconds) return false;
     const route = ROUTES[j.route], souvenir = SOUVENIRS[j.route === 1 ? 2 : this.state.trips % 2];
     this.state.trips++; if (!this.state.souvenirs.includes(souvenir)) this.state.souvenirs.push(souvenir);
+    this.state.world.map[j.route]++;
+    addLetter(this.state.world, now, j.name || 'お魚', `${route.name}の地図を描いてきたよ。新しい道を探してみよう！`, j.species);
     this.state.photos.push({ species: j.species, name: j.name || 'お魚', place: route.name }); this.state.photos = this.state.photos.slice(-12);
     this.state.journey = null; this.log(`探検のお土産「${souvenir}」と写真が届いた。`, now); this.grant(route.shells); return true;
   }
   greetFairy(now = Date.now()) { if (!this.state.fairy) return false; this.state.fairy = false; this.log('貝の妖精とごあいさつ。貝殻6個をもらった。', now); this.grant(6); return true; }
   toggleFeed() { this.state.autoFeed = !this.state.autoFeed; this.changed(); }
   dismissWelcome() { this.state.welcome = null; this.changed(); }
+  routeAvailable(route: number) { const r = ROUTES[route]; if (!r || this.state.level < r.level) return false; return route < 2 || (route === 2 ? this.state.world.map[0] > 0 && this.state.world.map[1] > 0 : this.state.world.map[2] > 0); }
+  greetCrab() { const c = this.state.world.crab; if (this.state.total < c.nextGreeting || c.bond >= 30) return false; c.bond++; c.nextGreeting = this.state.total + 900; this.changed(); return true; }
+  collectCrab() { const c = this.state.world.crab; if (!c.pending) return false; const amount = c.pending; c.pending = 0; this.grant(amount); return true; }
+  nameChild(id: number, value: string) { const c = this.state.world.children[id]; if (!c) return false; c.name = value.trim().slice(0, 16) || `ちび #${id}`; this.changed(); return true; }
+  moveChild(id: number, room: number) { const c = this.state.world.children[id]; if (!c || !Number.isInteger(room) || room < 0 || room > Math.min(2, this.state.level - 1)) return false; c.room = room; this.changed(); return true; }
+  petChild(id: number) { const c = this.state.world.children[id]; if (!c || this.state.total < c.lastPet) return false; c.affection = Math.min(100, c.affection + 1); c.lastPet = this.state.total + 10; this.changed(); return true; }
+  captureLook(look: Look) { const room = this.state.world.rooms[this.state.world.room]; const copy = { theme: look.theme, plant: look.plant, rock: look.rock, props: structuredClone(look.props) }; if (JSON.stringify(room.look) !== JSON.stringify(copy)) { room.look = copy; this.changed(); } }
+  selectRoom(room: number) { if (!Number.isInteger(room) || room < 0 || room > Math.min(2, this.state.level - 1)) return false; this.state.world.room = room; this.changed(); return true; }
+  nameRoom(room: number, value: string) { if (!Number.isInteger(room) || room < 0 || room > 2) return false; this.state.world.rooms[room].name = value.trim().slice(0, 16) || ['はじめの水槽', '夕焼けの浅瀬', '星夜の水槽'][room]; this.changed(); return true; }
+  readLetters() { this.state.world.read = this.state.world.serial; this.changed(); }
+  hotelChild(id: number) {
+    const f = this.state.young.find(f => f.id === id), c = this.state.world.children[id];
+    if (!f || !c || c.stage < 2 || this.state.world.hotel.length >= 200) return false;
+    this.state.world.hotel.push({ fish: { ...f }, child: { ...c } }); this.state.young = this.state.young.filter(f => f.id !== id); delete this.state.world.children[id]; this.changed(); return true;
+  }
+  restoreChild(id: number) {
+    const index = this.state.world.hotel.findIndex(h => h.fish.id === id); if (index < 0 || this.state.young.length + this.state.eggs.length >= 12) return false;
+    const [h] = this.state.world.hotel.splice(index, 1); h.child.room = Math.min(h.child.room, this.state.level - 1); this.state.young.push(h.fish); this.state.world.children[id] = h.child; this.changed(); return true;
+  }
 }

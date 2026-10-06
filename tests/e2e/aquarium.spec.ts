@@ -4,8 +4,49 @@ import type { Aquarium } from '../../src/simulation';
 import { FISH_PROFILES, FISH_SPECIES, PREDATOR_KINDS } from '../../src/species';
 import type { AquariumGame } from '../../src/game';
 import type { IdleAquarium } from '../../src/idle';
-declare global { interface Window { __aquarium: { sim: Aquarium; game: AquariumGame; idle: IdleAquarium; demonstrating: boolean; audio: AudioSnapshot; width: number; height: number; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
+declare global { interface Window { __aquarium: { sim: Aquarium; youngPositions: { id: number; x: number; y: number }[]; game: AquariumGame; idle: IdleAquarium; demonstrating: boolean; audio: AudioSnapshot; width: number; height: number; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
 const pageErrors = new WeakMap<Page, string[]>();
+
+test('grown named fish move between independently decorated tanks, rest at a hotel and return', async ({ page }, testInfo) => {
+  await page.evaluate(() => { const a = window.__aquarium; a.game.state.found = ['meal','school','escape','station','rest','friend','follow','song','decorate','fish-goldfish','fish-tetra','fish-angelfish','fish-puffer','fish-clownfish']; a.game.name(1, 'ぽろん'); a.idle.state.lastSeen = Date.now() - 8 * 3600000; localStorage.setItem('flyfish-idle-v1', JSON.stringify(a.idle.state)); });
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready); await page.locator('#pause').click();
+  const id = await page.evaluate(() => window.__aquarium.idle.state.young[0].id);
+  await page.locator('#idle-open').click(); const card = page.locator(`[data-child-name="${id}"]`).locator('..');
+  await expect(card).toContainText('大人のお魚'); await card.locator('input').fill('ちびぽろん'); await card.locator('form button').click();
+  await card.locator('[data-child-room]').selectOption('1'); await page.locator('[data-room="1"]').click();
+  await expect(page.locator('[data-room="1"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => page.evaluate(() => window.__aquarium.youngPositions.map(f => f.id))).toEqual([id]);
+  expect(await page.evaluate(() => window.__aquarium.sim.fish.every(f => window.__aquarium.sim.isAway(f)))).toBe(true);
+  await page.locator('[data-play-tab="decor"]').click(); await page.locator('[data-buy="shell"]').click();
+  await page.locator('#play-close').click(); await page.waitForTimeout(300); await page.screenshot({ path: testInfo.outputPath('world-second-tank.png'), fullPage: true });
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  expect(await page.evaluate(() => window.__aquarium.idle.state.world.room)).toBe(1); expect(await page.evaluate(() => window.__aquarium.game.state.props.shell?.on)).toBe(true);
+  await page.locator('#idle-open').click(); await expect(page.locator(`[data-child-name="${id}"] input`)).toHaveValue('ちびぽろん');
+  await page.locator(`[data-child-hotel="${id}"]`).click(); await expect(page.locator('#world-hotel-fish')).toContainText('ちびぽろん');
+  await page.locator('#world-hotel-return').click(); await expect(page.locator(`[data-child-name="${id}"] input`)).toHaveValue('ちびぽろん');
+  await page.locator('[data-room="0"]').click(); expect(await page.evaluate(() => window.__aquarium.game.state.props.shell?.on)).not.toBe(true);
+  await page.locator('#world-children').scrollIntoViewIfNeeded(); await page.screenshot({ path: testInfo.outputPath('world-grown-fish.png') });
+  await page.locator('#world-mail').scrollIntoViewIfNeeded(); await expect(page.locator('#world-mail')).toContainText('お便り'); await page.screenshot({ path: testInfo.outputPath('world-postcards.png') });
+  await page.locator('#world-mail-read').click(); expect(await page.evaluate(() => window.__aquarium.idle.state.world.read)).toBe(await page.evaluate(() => window.__aquarium.idle.state.world.serial));
+});
+
+test('shopkeeper, rare fish gallery and long expedition map retain earned progress', async ({ page }, testInfo) => {
+  await page.locator('#pause').click();
+  await page.evaluate(() => { const a = window.__aquarium; a.game.state.found = ['meal','school','escape','station','rest','friend','follow','song','decorate','fish-goldfish','fish-tetra','fish-angelfish','fish-puffer','fish-clownfish']; a.game.state.friends[1] = { name: 'ぽろん', bond: 60, rewarded: 3 }; a.game.name(1, 'ぽろん'); a.idle.state.level = 4; a.idle.state.world.map = [1, 1, 0, 0]; a.idle.state.lastSeen = Date.now() - 8 * 3600000; localStorage.setItem('flyfish-idle-v1', JSON.stringify(a.idle.state)); });
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready); await page.locator('#pause').click(); await page.locator('#idle-open').click();
+  await expect(page.locator('#world-crab-status')).toContainText('16/100'); const before = await page.evaluate(() => window.__aquarium.game.state.shells);
+  await page.locator('#world-crab-collect').click(); expect(await page.evaluate(() => window.__aquarium.game.state.shells)).toBe(before + 16); await expect(page.locator('#world-crab-collect')).toBeDisabled();
+  await page.locator('#world-crab-greet').click(); await expect(page.locator('#world-crab-status')).toContainText('仲良し度 1/30');
+  await expect(page.locator('#world-color-book .found')).toHaveCount(await page.evaluate(() => window.__aquarium.idle.state.world.colors.length));
+  await page.locator('#world-color-book').scrollIntoViewIfNeeded(); await page.screenshot({ path: testInfo.outputPath('world-color-book.png') });
+  await page.locator('#idle-trip-fish').selectOption('1'); await page.locator('#idle-trip-route').selectOption('2'); await page.locator('#idle-trip-start').click();
+  await page.evaluate(() => { const a = window.__aquarium; a.idle.state.lastSeen = Date.now() - 6 * 3600000; localStorage.setItem('flyfish-idle-v1', JSON.stringify(a.idle.state)); });
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready); await page.locator('#idle-open').click(); await page.locator('#idle-trip-receive').click();
+  expect(await page.evaluate(() => window.__aquarium.idle.state.world.map)).toEqual([1, 1, 1, 0]); await page.locator('#idle-trip-route').selectOption('3');
+  await page.locator('#world-map').scrollIntoViewIfNeeded(); await page.screenshot({ path: testInfo.outputPath('world-expedition-map.png') });
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready); expect(await page.evaluate(() => window.__aquarium.idle.state.world.map)).toEqual([1, 1, 1, 0]);
+  expect(await page.evaluate(() => window.__aquarium.idle.state.world.crab.bond)).toBe(1);
+});
 
 test('current mode matches applied controls and remains clear after reload and pause', async ({ page }, testInfo) => {
   await expect(page.locator('#current-mode')).toHaveText('つつくモード');

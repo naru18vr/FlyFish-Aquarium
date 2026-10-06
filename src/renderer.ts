@@ -4,7 +4,8 @@ import type { Aquarium } from './simulation';
 import type { Fish, Point } from './types';
 import { FISH_PROFILES, FISH_SPECIES, PREDATOR_KINDS, PREDATOR_PROFILES, type FishSpecies, type PredatorKind } from './species';
 import { AquariumGame, degreeOf, PHRASES, type VisitorKind } from './game';
-import type { IdleAquarium } from './idle';
+import type { IdleAquarium, YoungFish } from './idle';
+import { stage } from './idle-world';
 
 const palettes = [
   ['#efb969', '#ffd78d', '#ca8653'], ['#e4e4b5', '#fff4ce', '#afb98b'],
@@ -30,6 +31,7 @@ export class AquariumRenderer {
   idle?: IdleAquarium;
   private idleGarden = new Graphics();
   private youngSprites = new Map<number, Sprite>();
+  private youngTextures = new Map<FishSpecies, Texture[][]>();
   app = new Application();
   private background = new Container(); private plants = new Container(); private scenery = new Container(); private creatures = new Container(); private foreground = new Container();
   private food = new Graphics(); private bubbles = new Graphics(); private selection = new Graphics(); private ripples = new Graphics();
@@ -53,6 +55,7 @@ export class AquariumRenderer {
     this.app.canvas.tabIndex = 0;
     this.app.canvas.setAttribute('aria-describedby', 'keyboard-help');
     for (const species of FISH_SPECIES) this.textures.set(species, palettes.map(palette => [fishTexture(species, palette, 0), fishTexture(species, palette, 1), fishTexture(species, palette, 0, true)]));
+    for (const species of FISH_SPECIES) this.youngTextures.set(species, [palettes[0], ['#d4d1ef', '#f3f0ff', '#a6a3c1'], ['#f6b1bd', '#ffe2cc', '#c87689'], ['#9ed8bd', '#ddf4d3', '#5a9e90']].map(p => [fishTexture(species, p, 0), fishTexture(species, p, 1)]));
     for (const kind of PREDATOR_KINDS) this.predatorTextures.set(kind, pixelTexture(PREDATOR_PROFILES[kind].pattern, PREDATOR_PROFILES[kind].colors));
     this.visitorTextures.set('crab', pixelTexture(['a.......a', 'aa.....aa', '.abbbba.', '..bebeb..', '.abbbba.', 'a.a.a.a.a'], { a: '#c57b78', b: '#f2afa0', e: '#23484a' }));
     this.visitorTextures.set('chest', pixelTexture(['.aaaaaaa.', 'abbbbb b a'.replaceAll(' ', ''), 'accccccca', 'aaadddaaa', 'accdddcca', 'accccccca', '.aaaaaaa.'], { a: '#9b7b57', b: '#e4b676', c: '#c99463', d: '#ffe1a0' }));
@@ -157,18 +160,30 @@ export class AquariumRenderer {
       station.scale.set(scale); station.position.set(s.x, HEIGHT - 70 - 650 * scale); this.scenery.addChild(station);
     }
   }
-  private drawIdle(time: number) {
+  youngAt(point: Point) {
+    let best: YoungFish | undefined;
+    let near = 24;
+    for (const f of this.idle?.state.young ?? []) {
+      const sprite = this.youngSprites.get(f.id); if (!sprite?.visible) continue;
+      const distance = Math.hypot(sprite.x - point.x, sprite.y - point.y);
+      if (distance < near) { best = f; near = distance; }
+    }
+    return best;
+  }
+  youngPositions() { return (this.idle?.state.young ?? []).flatMap(f => { const sprite = this.youngSprites.get(f.id); return sprite?.visible ? [{ id: f.id, x: sprite.x, y: sprite.y }] : []; }); }
+  scareYoung(id: number, point: Point) { const sprite = this.youngSprites.get(id); if (sprite) sprite.position.set(Math.max(24, Math.min(WIDTH - 24, sprite.x + (id % 2 ? 60 : -60))), Math.max(100, sprite.y - 40)); }
+  private drawIdle(time: number, dt: number, food: Point[]) {
     const s = this.idle?.state; this.idleGarden.clear(); if (!s) return;
     const scale = 2 * Math.max(1, Math.min(2.5, HEIGHT / WIDTH)), x = WIDTH * .46, y = HEIGHT - 92;
     const color = ['#8fc690', '#ddabc2', '#d1dba0'][s.garden];
     const height = (12 + 35 * s.growth / 1200) * scale;
-    for (let i = -1; i <= 1; i++) {
+    for (let i = -1; i <= 1 && s.world.room === 0; i++) {
       const px = x + i * 13 * scale;
       this.idleGarden.rect(px, y - height, 2 * scale, height).fill('#78aa83');
       this.idleGarden.rect(px - 5 * scale, y - height * .55, 6 * scale, 3 * scale).rect(px, y - height * .75, 7 * scale, 3 * scale).fill(color);
       if (s.growth >= 1200) this.idleGarden.rect(px - 4 * scale, y - height - 5 * scale, 10 * scale, 7 * scale).fill(s.garden === 2 ? '#f4dfa2' : '#eab6bf').rect(px, y - height - 3 * scale, 3 * scale, 3 * scale).fill('#fff2bb');
     }
-    for (let i = 0; i < s.eggs.length; i++) {
+    for (let i = 0; i < s.eggs.length && s.world.room === 0; i++) {
       const ex = WIDTH * .58 + i * 16 * scale;
       this.idleGarden.rect(ex, y - 12 * scale, 7 * scale, 10 * scale).fill('#fff1d5').rect(ex + 2 * scale, y - 10 * scale, 3 * scale, 3 * scale).fill('#ead4b5');
     }
@@ -176,11 +191,27 @@ export class AquariumRenderer {
     for (const [id, sprite] of this.youngSprites) if (!ids.has(id)) { sprite.destroy(); this.youngSprites.delete(id); }
     for (let i = 0; i < s.young.length; i++) {
       const f = s.young[i]; let sprite = this.youngSprites.get(f.id);
-      if (!sprite) { sprite = new Sprite(); sprite.anchor.set(.5); this.creatures.addChild(sprite); this.youngSprites.set(f.id, sprite); }
-      sprite.texture = this.textures.get(f.species)![i % 5][Math.floor(time * 4 + i) % 2];
-      const phase = time * .35 + i * .8, size = FISH_PROFILES[f.species].scale * .52;
+      const c = s.world.children[f.id];
+      if (!sprite) { sprite = new Sprite(); sprite.anchor.set(.5); sprite.position.set(WIDTH * .5 + Math.sin(i * .8) * WIDTH * .19, HEIGHT * .58 + Math.cos(i * .56) * Math.min(65, HEIGHT * .1) + i % 3 * 15); this.creatures.addChild(sprite); this.youngSprites.set(f.id, sprite); }
+      sprite.visible = !!c && c.room === s.world.room; if (!sprite.visible) continue;
+      sprite.texture = this.youngTextures.get(f.species)![c.shade][Math.floor(time * 4 + i) % 2];
+      const age = stage(s.total - f.born), phase = time * .35 + i * .8, size = FISH_PROFILES[f.species].scale * [.52, .75, 1][age];
       sprite.scale.set(Math.cos(phase) < 0 ? -size : size, size);
-      sprite.position.set(WIDTH * .5 + Math.sin(phase) * WIDTH * .19, HEIGHT * .58 + Math.cos(phase * .7) * Math.min(65, HEIGHT * .1) + i % 3 * 15);
+      const p = this.game?.state.props[c.favorite as 'shell' | 'arch' | 'star'];
+      const rest = age > 0 && (time + i * 3) % 40 > 25;
+      let target = { x: (rest ? p?.on ? WIDTH * [.18, .5, .82][p.position] : WIDTH * .46 : WIDTH * .5) + Math.sin(phase) * WIDTH * (rest ? .025 : .19), y: (rest ? HEIGHT - 160 : HEIGHT * .58) + Math.cos(phase * .7) * Math.min(65, HEIGHT * .1) + i % 3 * 15 };
+      const meal = food.find(p => Math.hypot(p.x - sprite.x, p.y - sprite.y) < 200);
+      if (meal) target = meal;
+      else if (this.game?.state.followPointer && this.game.pointer && !this.game.phrase) target = { x: this.game.pointer.x + Math.sin(phase) * 25, y: this.game.pointer.y + Math.cos(phase) * 20 };
+      const blend = Math.min(1, dt * 2.5); sprite.position.set(sprite.x + (target.x - sprite.x) * blend, sprite.y + (target.y - sprite.y) * blend);
+      sprite.x = Math.max(24, Math.min(WIDTH - 24, sprite.x)); sprite.y = Math.max(100, Math.min(HEIGHT - 110, sprite.y));
+    }
+    if (s.world.room === 0) {
+      const cx = WIDTH * .78, cy = HEIGHT - 100, unit = Math.min(4, scale);
+      this.idleGarden.rect(cx - 12 * unit, cy + 3 * unit, 24 * unit, 3 * unit).fill('#c39564').rect(cx - 8 * unit, cy - 5 * unit, 16 * unit, 8 * unit).fill('#eaa59b');
+      this.idleGarden.rect(cx - 12 * unit, cy - 10 * unit, 5 * unit, 7 * unit).rect(cx + 8 * unit, cy - 10 * unit, 5 * unit, 7 * unit).fill('#eaa59b');
+      this.idleGarden.rect(cx - 4 * unit, cy - 6 * unit, 2 * unit, 2 * unit).rect(cx + 3 * unit, cy - 6 * unit, 2 * unit, 2 * unit).fill('#284948');
+      if (s.world.crab.pending) this.idleGarden.rect(cx - 2 * unit, cy - 19 * unit, 5 * unit, 5 * unit).fill('#fce2a1');
     }
   }
   effect(point: Point, kind: string, midi?: number) { this.ripple.push({ ...point, age: 0, kind, midi }); if (this.ripple.length > 40) this.ripple.shift(); }
@@ -210,7 +241,7 @@ export class AquariumRenderer {
       if (sim.isAway(fish)) { const sprite = this.fishSprites.get(fish.id); if (sprite) sprite.visible = false; continue; }
       this.drawFish(fish, sim.time); this.fishSprites.get(fish.id)!.visible = true;
     }
-    this.drawIdle(sim.time);
+    this.drawIdle(sim.time, dt, sim.food);
     const predatorIds = new Set(sim.predators.map(p => p.id));
     for (const [id, sprite] of this.predatorSprites) if (!predatorIds.has(id)) { sprite.destroy(); this.predatorSprites.delete(id); }
     for (const p of sim.predators) {
