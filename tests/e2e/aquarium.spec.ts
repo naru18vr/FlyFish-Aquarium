@@ -394,7 +394,7 @@ test('clicks use sensory stimuli, nearby fish react, and empty clicks feed from 
   await page.locator('#inspector-close').click(); await expect(page.locator('#inspector')).not.toBeVisible();
 });
 test('pure brain and maximum settings remain stable; quality updates the Worker', async ({ page }) => {
-  await page.locator('summary').click();
+  await page.locator('.advanced summary').click();
   await page.locator('#quality').selectOption('high'); await expect(page.locator('#brain-status')).toContainText('768 neurons');
   for (const [id, value] of [['fishCount', '40'], ['predators', '8'], ['stations', '6'], ['flyWeight', '100']]) {
     await page.locator(`#${id}`).evaluate((input: HTMLInputElement, value) => { input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); }, value);
@@ -448,7 +448,7 @@ test('right clicks do not feed and settings survive reload with bounded values',
 });
 
 test('rapid quality changes and reset keep the final neural configuration', async ({ page }) => {
-  await page.locator('summary').click();
+  await page.locator('.advanced summary').click();
   await page.evaluate(() => {
     const quality = document.querySelector<HTMLSelectElement>('#quality')!;
     for (const value of ['high', 'low', 'high', 'medium']) { quality.value = value; quality.dispatchEvent(new Event('input', { bubbles: true })); }
