@@ -21,7 +21,7 @@ export class WorldUI {
     <article class="world-mail"><h4>💌 水槽からのお便り</h4><p>成長やお気に入りの場所、留守中の思い出を名前付きの絵はがきに。お便りは最新30通を保存します。</p><button id="world-mail-read">お便りを読んだよ</button><div id="world-mail"></div></article>`);
     document.querySelector('#tank')!.insertAdjacentHTML('beforebegin', '<div class="world-location"><strong id="world-location-name"></strong><span id="world-location-count"></span><button id="world-location-open">水槽を選ぶ</button></div>');
     document.querySelector('[data-play-panel="idle"] > p')!.insertAdjacentHTML('afterend', '<nav class="idle-shortcuts" aria-label="おるすばんの項目へ移動">'+[['world-rooms','水槽を選ぶ'],['world-children','育てた魚・引っ越し'],['idle-trip-picker','探検に行く'],['world-map','探検地図'],['world-color-book','色違い図鑑'],['world-mail','お便り']].map(([id,label])=>`<button data-idle-jump="${id}">${label} ↓</button>`).join('')+'</nav>');
-    document.querySelector('#tank')!.insertAdjacentHTML('beforeend', '<aside id="world-empty" class="world-empty" hidden><strong>この水槽には、まだお魚がいません</strong><p id="world-empty-text"></p><div><button data-return-home>はじめの水槽へ戻る</button><button data-open-young>育てた魚を引っ越す</button></div></aside>');
+    document.querySelector('#tank')!.insertAdjacentHTML('beforeend', '<aside id="world-empty" class="world-empty" hidden><strong>育てたお魚を、この水槽に迎えよう</strong><p id="world-empty-text"></p><div><button data-return-home>はじめの水槽へ戻る</button><button data-open-young>育てた魚を引っ越す</button></div></aside>');
     const openYoung = () => { book.open('idle'); this.refresh(true); document.querySelector('#world-children')!.closest('article')!.scrollIntoView({block:'start'}); };
     document.addEventListener('click', event => { const b=(event.target as Element).closest<HTMLButtonElement>('button'); if(!b)return; if(b.hasAttribute('data-open-young'))openYoung(); if(b.hasAttribute('data-return-home'))this.onRoom(0); if(b.dataset.idleJump){this.refresh(true); document.getElementById(b.dataset.idleJump)!.scrollIntoView({block:'center'});} });
     document.querySelector<HTMLButtonElement>('#world-location-open')!.onclick=()=>{book.open('idle');this.refresh(true);document.querySelector('#world-rooms')!.scrollIntoView({block:'center'});};
@@ -53,7 +53,7 @@ export class WorldUI {
     document.querySelector('#metric-fish')!.textContent=String(count); document.querySelector('#tank-fish-count')!.textContent=String(count);
     document.querySelector('.tank-title > span:nth-child(2)')!.textContent=w.rooms[w.room].name; document.querySelector('.tank-number')!.textContent=String(w.room+1).padStart(2,'0');
     document.querySelector<HTMLElement>('#world-empty')!.hidden=w.room===0||count>0||!!this.game.phrase;
-    document.querySelector('#world-empty-text')!.textContent=`元からのお魚は「${w.rooms[0].name}」にいます。ここには育てた魚を引っ越せます。`;
+    document.querySelector('#world-empty-text')!.textContent=`元からのお魚は「${w.rooms[0].name}」にいます。ここには卵から育てた魚を引っ越せます。敵や訪問者は、住んでいる魚の数に含みません。`;
     const quick = document.querySelector<HTMLButtonElement>('#world-room-open')!;
     quick.hidden = !!this.game.phrase; quick.textContent = `${w.rooms[w.room].name} · ${count}匹 · ${w.letters.filter(l => l.id > w.read).length ? 'お便りあり' : '水槽たち'} →`;
     for (const o of document.querySelector<HTMLSelectElement>('#idle-trip-route')!.options) o.disabled = !this.idle.routeAvailable(+o.value);
