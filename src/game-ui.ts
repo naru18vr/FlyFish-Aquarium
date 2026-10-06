@@ -79,7 +79,7 @@ export class GameUI {
     this.tab = tab; this.dialog.scrollTop = 0; if (this.sim.selected !== null) this.picked = this.sim.selected;
     this.message(''); this.refresh(true); if (!this.dialog.open) this.dialog.showModal();
   }
-  private phraseIds() { return this.game.phrase ? PHRASES[this.game.phrase.index].notes.map(n => this.sim.fish.find(f => degreeOf(f.id) === n)?.id ?? n + 1) : []; }
+  private phraseIds() { return this.game.phrase ? PHRASES[this.game.phrase.index].notes.map(n => this.sim.fish.find(f => !this.sim.isAway(f) && degreeOf(f.id) === n)?.id ?? n + 1) : []; }
   updateHud() {
     const p = this.game.phrase, hud = document.querySelector<HTMLElement>('#music-hud')!;
     hud.hidden = !p;
@@ -87,7 +87,7 @@ export class GameUI {
     const phrase = PHRASES[p.index], ids = this.phraseIds();
     document.querySelector('#music-title')!.textContent = phrase.name;
     document.querySelector('#music-sequence')!.innerHTML = phrase.notes.map((n, i) => `<span class="${i < p.step ? 'done' : i === p.step ? 'next' : ''}">${NOTE_NAMES[n]}</span>`).join('');
-    const target = this.sim.fish.find(f => degreeOf(f.id) === phrase.notes[p.step]);
+    const target = this.sim.fish.find(f => !this.sim.isAway(f) && degreeOf(f.id) === phrase.notes[p.step]);
     document.querySelector('#music-instruction')!.textContent = this.demonstrating ? 'お手本を演奏中 ♪ 終わったらつついてみよう。' : target ? `次は ${this.game.friend(target.id).name || `お魚 #${target.id}`}。光る輪が目印！ (${p.step}/${ids.length})` : 'この音の魚を増やしてね。';
   }
   refresh(force = false) {
@@ -103,13 +103,17 @@ export class GameUI {
     if (guide) guide.textContent = state.gentle ? '魚をなでる' : '魚をつつく';
     if (!force && (!this.dialog.open || this.seenRevision === this.game.revision)) return;
     this.seenRevision = this.game.revision;
-    document.querySelector('#play-title')!.textContent = ({ home: '何してあそぶ？', friends: '魚となかよし', music: '音あそび', journal: '図鑑を集める', decor: '水槽を飾る', visitors: 'お客さまに会う' } as Record<string, string>)[this.tab];
+    document.querySelector('#play-title')!.textContent = ({ home: '何してあそぶ？', friends: '魚となかよし', music: '音あそび', journal: '図鑑を集める', decor: '水槽を飾る', visitors: 'お客さまに会う', idle: 'おるすばんの水槽' } as Record<string, string>)[this.tab];
     document.querySelectorAll<HTMLButtonElement>('[data-play-tab]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.playTab === this.tab)));
     document.querySelectorAll<HTMLElement>('[data-play-panel]').forEach(p => p.hidden = p.dataset.playPanel !== this.tab);
     document.querySelector<HTMLInputElement>('#gentle-mode')!.checked = state.gentle;
     document.querySelector<HTMLInputElement>('#follow-pointer')!.checked = state.followPointer;
     this.updateFriend();
-    for (const i of [0, 1, 2]) document.querySelector(`#song-done-${i}`)!.textContent = state.songs.includes(i) ? '✓ 演奏できた' : '';
+    for (const i of [0, 1, 2]) {
+      const missing = PHRASES[i].notes.some(n => !this.sim.fish.some(f => !this.sim.isAway(f) && degreeOf(f.id) === n));
+      document.querySelector<HTMLButtonElement>(`[data-start-phrase="${i}"]`)!.disabled = missing;
+      document.querySelector(`#song-done-${i}`)!.textContent = missing ? 'この音の魚は探検中。帰りを待つか、魚を増やしてね。' : state.songs.includes(i) ? '✓ 演奏できた' : '';
+    }
     document.querySelector('#journal-count')!.textContent = `${state.found.length} / ${JOURNAL.length} の発見`;
     document.querySelector('#journal-list')!.innerHTML = JOURNAL.map(j => `<article class="journal-entry ${state.found.includes(j.id) ? 'found' : ''}" data-discovery="${j.id}"><span>${state.found.includes(j.id) ? '✦' : '○'}</span><h4>${j.name}</h4><p>${j.hint}</p><small>${state.found.includes(j.id) ? '発見済み' : 'まだ見つけていない'}</small></article>`).join('');
     document.querySelector('#decor-list')!.innerHTML = SHOP.map(item => {
@@ -136,7 +140,9 @@ export class GameUI {
     document.querySelector('#friend-progress')!.textContent = `仲良し度 ${f.bond} / 100`;
     const input = document.querySelector<HTMLInputElement>('#friend-name')!;
     if (document.activeElement !== input) input.value = f.name;
-    document.querySelector<HTMLButtonElement>('#friend-call')!.disabled = f.bond < 8;
-    document.querySelector('#friend-call-hint')!.textContent = f.bond < 8 ? `あと ${8 - f.bond} 仲良し度で呼べます。なでるか、餌をあげよう。` : '呼ぶと、この魚と仲良しの魚が水槽の中央に寄ってきます。';
+    const away = !!fish && this.sim.isAway(fish);
+    document.querySelector<HTMLButtonElement>('#friend-call')!.disabled = f.bond < 8 || away;
+    document.querySelector<HTMLButtonElement>('#friend-watch')!.disabled = away;
+    document.querySelector('#friend-call-hint')!.textContent = away ? 'この魚は探検中です。「おるすばん」で帰りを確認できます。' : f.bond < 8 ? `あと ${8 - f.bond} 仲良し度で呼べます。なでるか、餌をあげよう。` : '呼ぶと、この魚と仲良しの魚が水槽の中央に寄ってきます。';
   }
 }

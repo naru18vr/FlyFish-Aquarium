@@ -20,6 +20,24 @@ async function capturedPeak(page: Page) {
   });
 }
 
+test('published idle aquarium earns a bounded return and saves a harvest and hatch', async ({ page }, testInfo) => {
+  await page.goto('./?tank&debug'); await page.waitForFunction(() => window.__aquarium?.ready);
+  await page.evaluate(() => { const a = window.__aquarium; a.idle.state.lastSeen = Date.now() - 3600000; localStorage.setItem('flyfish-idle-v1', JSON.stringify(a.idle.state)); });
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  await page.locator('#tank-pause').click();
+  await page.locator('#idle-open').click(); await expect(page.locator('#idle-shell-count')).toContainText('12 / 200');
+  expect(await page.evaluate(() => window.__aquarium.idle.state.young.length)).toBe(1);
+  const before = await page.evaluate(() => window.__aquarium.game.state.shells);
+  await page.locator('#idle-shell-collect').click(); await page.locator('#idle-harvest').click();
+  expect(await page.evaluate(() => window.__aquarium.game.state.shells)).toBe(before + 18);
+  await page.screenshot({ path: testInfo.outputPath('published-idle-notebook.png') });
+  await page.locator('#play-close').click(); await page.screenshot({ path: testInfo.outputPath('published-idle-tank.png') });
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  expect(await page.evaluate(() => window.__aquarium.idle.state.blooms)).toBe(1);
+  expect(await page.evaluate(() => window.__aquarium.idle.state.young.length)).toBe(1);
+  expect(await page.evaluate(() => window.__aquarium.game.state.owned)).toContain('pink');
+});
+
 test('published notebook discovers fish and exchanges shells for a lasting decoration', async ({ page }, testInfo) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('./?tank&debug'); await page.waitForFunction(() => window.__aquarium?.game.state.found.length >= 5);

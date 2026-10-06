@@ -40,7 +40,7 @@ export interface Fish extends Point {
   activity: number[]; spikes: number; target: Point | null; flyWeight: number; programWeight: number;
 }
 export interface Predator extends Point { id: number; kind: PredatorKind; angle: number; state: 'PATROL' | 'CHASE' | 'COOLDOWN'; timer: number; target: Fish | null }
-export interface Food extends Point { id: number; age: number; vx: number }
+export interface Food extends Point { id: number; age: number; vx: number; manual?: boolean }
 export interface Rock extends Point { r: number }
 export interface Station extends Point { timer: number }
 export interface Connectome {

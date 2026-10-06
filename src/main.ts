@@ -10,6 +10,8 @@ import { DEFAULTS, QUALITY, idleMotor, type BrainRequest, type BrainResponse, ty
 import { AquariumAudio, readAudioSettings, type AudioSettings } from './audio';
 import { AquariumGame, GAME_KEY } from './game';
 import { GameUI } from './game-ui';
+import { IdleAquarium, IDLE_KEY } from './idle';
+import { IdleUI } from './idle-ui';
 import { distance, safePosition } from './math';
 
 // Preserve only recognized, bounded values. Storage may be unavailable in private mode.
@@ -39,16 +41,28 @@ const ui = new UI(settings, sound.settings), sim = new Aquarium(settings), rende
 let savedGame: unknown;
 try { savedGame = JSON.parse(localStorage.getItem(GAME_KEY) || 'null'); } catch { /* Optional storage. */ }
 const game = new AquariumGame(savedGame), play = new GameUI(game, sim);
+let savedIdle: unknown;
+try { savedIdle = JSON.parse(localStorage.getItem(IDLE_KEY) || 'null'); } catch { /* Optional storage. */ }
+const idle = new IdleAquarium(savedIdle), idleUI = new IdleUI(idle, game, sim, play);
+let lastAway = idle.state.journey?.fishId ?? null;
+idle.onChange = () => {
+  const away = idle.state.journey && idle.isAway(idle.state.journey.fishId) ? idle.state.journey.fishId : null;
+  if (away !== lastAway) { lastAway = away; play.refresh(true); }
+  try { localStorage.setItem(IDLE_KEY, JSON.stringify(idle.state)); } catch { play.storageUnavailable(); } };
+idle.onGrant = grant => game.receiveIdle(grant);
+sim.isAway = fish => idle.isAway(fish.id);
+renderer.idle = idle; play.refresh(true);
 play.onMusicStart = () => { inspecting = false; sim.selected = null; ui.inspecting(false); ui.inspector(undefined, 0); ui.tankMode(true); };
 renderer.game = game;
 game.onNotice = message => { ui.toast(message); play.message(message); };
 game.onChange = () => { try { localStorage.setItem(GAME_KEY, JSON.stringify(game.state)); } catch { play.storageUnavailable(); } };
-sim.onEat = fish => game.meal(fish);
+sim.onEat = (fish, manual) => game.meal(fish, manual);
+idle.tick(Date.now(), game.state.found.length); idle.flushGrants(); idle.onChange(); idleUI.refresh(true);
 sim.companion = fish => inspecting ? null : game.followTarget(fish);
 play.onFeed = () => ui.onFeed();
 play.onCall = id => {
   const fish = sim.fish.find(f => f.id === id);
-  if (!fish || game.friend(id).bond < 8) return;
+  if (!fish || idle.isAway(id) || game.friend(id).bond < 8) return;
   game.callFriends(safePosition({ x: WIDTH * .5, y: HEIGHT * .45 }, sim.activeRocks()));
   renderer.effect(game.call!, 'heart'); ui.toast('こっちにおいで。仲良しの魚に声をかけました');
 };
@@ -228,13 +242,15 @@ async function start() {
   renderer.app.canvas.addEventListener('keydown', event => {
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
       event.preventDefault();
-      const index = sim.fish.findIndex(f => f.id === sim.selected);
+      const visibleFish = sim.fish.filter(f => !idle.isAway(f.id));
+      if (!visibleFish.length) return;
+      const index = visibleFish.findIndex(f => f.id === sim.selected);
       const delta = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
-      sim.selected = sim.fish[(index < 0 ? delta > 0 ? 0 : sim.fish.length - 1 : (index + delta + sim.fish.length) % sim.fish.length)].id;
+      sim.selected = visibleFish[(index < 0 ? delta > 0 ? 0 : visibleFish.length - 1 : (index + delta + visibleFish.length) % visibleFish.length)].id;
       ui.inspector(game.phrase ? undefined : sim.fish.find(f => f.id === sim.selected), workerMs);
     } else if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      const fish = sim.fish.find(f => f.id === sim.selected);
+      const fish = sim.fish.find(f => f.id === sim.selected && !idle.isAway(f.id));
       if (fish && !inspecting) {
         playFish(fish.id, fish);
         const gentle = game.state.gentle || !!game.phrase;
@@ -248,14 +264,21 @@ async function start() {
     }
   });
   void startBrain();
-  let last = performance.now(), uiTime = 0, frames = 0, fpsTime = 0, accumulator = 0, pausedRenderTime = 1;
+  let last = performance.now(), idleTime = 0, lastAutoFeed = 0, uiTime = 0, frames = 0, fpsTime = 0, accumulator = 0, pausedRenderTime = 1;
   function frame(now: number) {
     const elapsed = (now - last) / 1000; last = now;
     const dt = Math.min(elapsed, .1);
+    idleTime += elapsed;
+    if (idleTime >= 1) { idleTime = 0; idle.tick(Date.now(), game.state.found.length); idleUI.refresh(); }
+    if (sim.time < lastAutoFeed) lastAutoFeed = sim.time;
+    if (!paused && !document.hidden && idle.state.autoFeed && sim.time - lastAutoFeed >= 45) {
+      lastAutoFeed = sim.time;
+      if (sim.food.length < 40) sim.feed(WIDTH * .5, true, 48, 2, false);
+    }
     if (!paused && !document.hidden) {
       accumulator += dt;
       const hour = new Date().getHours();
-      while (accumulator >= 1 / 60) { sim.update(1 / 60); game.update(1 / 60, sim.fish, sim.stations, hour); accumulator -= 1 / 60; brainTime += 1 / 60; }
+      while (accumulator >= 1 / 60) { sim.update(1 / 60); game.update(1 / 60, idle.state.journey ? sim.fish.filter(f => !idle.isAway(f.id)) : sim.fish, sim.stations, hour); accumulator -= 1 / 60; brainTime += 1 / 60; }
       if (ready && !busy && brainTime >= 1 / QUALITY[settings.quality].hz) {
         brainTime %= 1 / QUALITY[settings.quality].hz; busy = true;
         send({ type: 'tick', revision, fish: sim.fish.map(f => ({ id: f.id, sensory: f.sensory, noise: .1 + (f.traits.brainNoise + 1) * settings.variation * .2 })) });
@@ -271,7 +294,7 @@ async function start() {
   requestAnimationFrame(frame);
   // Read-only diagnostics are opt-in and never run neural computation on main.
   if (new URLSearchParams(location.search).has('debug')) {
-    Object.defineProperty(window, '__aquarium', { value: { sim, game, get demonstrating() { return demonstrating; }, get audio() { return sound.snapshot; }, get width() { return WIDTH; }, get height() { return HEIGHT; }, get ready() { return ready; }, get workerMs() { return workerMs; }, get paused() { return paused; }, get brainFailed() { return brainFailed; } } });
+    Object.defineProperty(window, '__aquarium', { value: { sim, game, idle, get demonstrating() { return demonstrating; }, get audio() { return sound.snapshot; }, get width() { return WIDTH; }, get height() { return HEIGHT; }, get ready() { return ready; }, get workerMs() { return workerMs; }, get paused() { return paused; }, get brainFailed() { return brainFailed; } } });
     (document.querySelector('#debug-toggle') as HTMLInputElement).checked = true;
   }
   if (new URLSearchParams(location.search).has('tank')) ui.tankMode(true);

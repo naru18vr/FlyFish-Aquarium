@@ -11,7 +11,8 @@ export class Aquarium {
   private fishGrid = new SpatialGrid<Fish>(); private foodGrid = new SpatialGrid<Food>(); private predatorGrid = new SpatialGrid<Predator>();
   private aiTime = 0;
   private stationLayout = '';
-  onEat: (fish: Fish) => void = () => {};
+  onEat: (fish: Fish, manual: boolean) => void = () => {};
+  isAway: (fish: Fish) => boolean = () => false;
   companion: ((fish: Fish) => Point | null) | null = null;
   constructor(public settings: Settings) { setWorldSize(BASE_WIDTH, BASE_HEIGHT); this.applySettings(); }
   get environmentScale() { return Math.min(1.25, WIDTH / BASE_WIDTH); }
@@ -27,7 +28,7 @@ export class Aquarium {
     this.applySettings();
     for (const food of this.food) Object.assign(food, safePosition(food, this.activeRocks(), 3));
     this.aiTime = .05;
-    this.fishGrid.rebuild(this.fish); this.foodGrid.rebuild(this.food); this.predatorGrid.rebuild(this.predators);
+    this.fishGrid.rebuild(this.fish.filter(f => !this.isAway(f))); this.foodGrid.rebuild(this.food); this.predatorGrid.rebuild(this.predators);
   }
   activeRocks() { return this.settings.rocks ? this.rocks : []; }
   applySettings() {
@@ -85,11 +86,11 @@ export class Aquarium {
       startleLeft: 0, startleRight: 0, eating: 0, fly: idleMotor(), program: idleMotor(), action: idleMotor(), sensory: emptySense(), activity: Array(32).fill(0), spikes: 0, target: null,
       flyWeight: this.settings.flyWeight, programWeight: 1 - this.settings.flyWeight };
   }
-  feed(x: number, surface = true, y = 48, count = 5) {
-    for (let i = 0; i < count && this.food.length < MAX_FOOD; i++) this.food.push({ id: ++this.foodId, x: clamp(x + (this.rng() - .5) * 32, BOUNDS.left + 10, BOUNDS.right - 10), y: surface ? BOUNDS.top + 5 + this.rng() * 10 : y, age: 0, vx: (this.rng() - .5) * 9 });
+  feed(x: number, surface = true, y = 48, count = 5, manual = true) {
+    for (let i = 0; i < count && this.food.length < MAX_FOOD; i++) this.food.push({ id: ++this.foodId, x: clamp(x + (this.rng() - .5) * 32, BOUNDS.left + 10, BOUNDS.right - 10), y: surface ? BOUNDS.top + 5 + this.rng() * 10 : y, age: 0, manual, vx: (this.rng() - .5) * 9 });
   }
   pick(point: Point) {
-    return this.fish.reduce<Fish | null>((best, f) => distance(f, point) < 27 && (!best || distance(f, point) < distance(best, point)) ? f : best, null);
+    return this.fish.filter(f => !this.isAway(f)).reduce<Fish | null>((best, f) => distance(f, point) < 27 && (!best || distance(f, point) < distance(best, point)) ? f : best, null);
   }
   interact(point: Point, inspect = false) {
     const fish = this.pick(point);
@@ -100,7 +101,7 @@ export class Aquarium {
     return 'scare';
   }
   scare(fish: Fish, point: Point) {
-    const neighbours = this.fish.filter(f => distance(f, fish) < 170);
+    const neighbours = this.fish.filter(f => !this.isAway(f) && distance(f, fish) < 170);
     for (const f of neighbours) {
       const d = distance(f, fish);
       const intensity = f === fish ? this.settings.startle : this.settings.startle * this.settings.nearby * (d < 85 ? .5 : .2);
@@ -117,8 +118,9 @@ export class Aquarium {
     return result;
   }
   senseAndThink() {
-    this.fishGrid.rebuild(this.fish); this.foodGrid.rebuild(this.food); this.predatorGrid.rebuild(this.predators);
+    this.fishGrid.rebuild(this.fish.filter(f => !this.isAway(f))); this.foodGrid.rebuild(this.food); this.predatorGrid.rebuild(this.predators);
     for (const f of this.fish) {
+      if (this.isAway(f)) continue;
       const s = emptySense();
       const variation = this.settings.variation * .23;
       const sensitivity = 1 + f.traits.foodSensitivity * variation;
@@ -176,7 +178,7 @@ export class Aquarium {
     if (this.aiTime >= .05) { this.aiTime %= .05; this.senseAndThink(); }
     for (const s of this.stations) {
       s.timer -= dt;
-      if (s.timer <= 0) { this.feed(s.x, false, s.y - 42 * this.environmentScale, 2); s.timer = 7 + this.rng() * 4; }
+      if (s.timer <= 0) { this.feed(s.x, false, s.y - 42 * this.environmentScale, 2, false); s.timer = 7 + this.rng() * 4; }
     }
     for (const food of this.food) {
       food.age += dt; food.y += (food.y > BOUNDS.bottom - 8 ? 0 : 13) * dt;
@@ -185,6 +187,7 @@ export class Aquarium {
     }
     this.food = this.food.filter(food => food.age < 45);
     for (const f of this.fish) {
+      if (this.isAway(f)) continue;
       f.angle = Number.isFinite(f.angle) ? f.angle : 0;
       f.speed = clamp(f.speed, 0, 190);
       f.fear = clamp(f.fear);
@@ -211,7 +214,7 @@ export class Aquarium {
       f.eating = Math.max(0, f.eating - dt);
       for (const food of this.foodGrid.near(f, 19)) if (this.food.includes(food) && distance(f, food) < 19) {
         this.food.splice(this.food.indexOf(food), 1); f.hunger = clamp(f.hunger - .18); f.energy = clamp(f.energy + .06); f.eating = .55; this.eaten++;
-        this.onEat(f);
+        this.onEat(f, food.manual === true);
       }
     }
     for (const p of this.predators) {
@@ -222,8 +225,8 @@ export class Aquarium {
         const nearby = this.fishGrid.near(p, profile.range);
         if (nearby.length && p.timer < 0) { p.target = nearby.reduce((a, b) => distance(p, a) < distance(p, b) ? a : b); p.state = 'CHASE'; p.timer = profile.duration; }
       } else if (p.state === 'CHASE') {
-        if (p.target && this.fish.includes(p.target)) p.angle += clamp(angleDiff(Math.atan2(p.target.y - p.y, p.target.x - p.x), p.angle), -profile.turn * dt, profile.turn * dt);
-        if (p.timer <= 0 || !p.target || !this.fish.includes(p.target) || distance(p, p.target) < 35) { p.state = 'COOLDOWN'; p.timer = profile.cooldown; p.target = null; }
+        if (p.target && (this.fish.includes(p.target) && !this.isAway(p.target))) p.angle += clamp(angleDiff(Math.atan2(p.target.y - p.y, p.target.x - p.x), p.angle), -profile.turn * dt, profile.turn * dt);
+        if (p.timer <= 0 || !p.target || !(this.fish.includes(p.target) && !this.isAway(p.target)) || distance(p, p.target) < 35) { p.state = 'COOLDOWN'; p.timer = profile.cooldown; p.target = null; }
       } else if (p.timer <= 0) { p.state = 'PATROL'; p.timer = 2; }
       let speed = p.state === 'CHASE' ? profile.chase : p.state === 'COOLDOWN' ? profile.rest : profile.patrol;
       if (p.kind === 'squid') speed *= .55 + .75 * Math.max(0, Math.sin(this.time * 6 + p.id));

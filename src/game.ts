@@ -41,7 +41,7 @@ export const degreeOf = (id: number) => ((id - 1) % 10 + 10) % 10;
 export const friendshipLabel = (value: number) => value >= 60 ? 'だいすき' : value >= 24 ? 'なかよし' : value >= 8 ? '顔なじみ' : 'はじめまして';
 export interface FishFriend { name: string; bond: number; rewarded: number }
 export interface GameState {
-  version: 1; shells: number; gentle: boolean; followPointer: boolean; friends: Record<string, FishFriend>;
+  version: 1; idleReceipts: string[]; shells: number; gentle: boolean; followPointer: boolean; friends: Record<string, FishFriend>;
   found: string[]; owned: ShopId[]; theme: 'sea' | 'sunset' | 'night'; plant: 'green' | 'pink'; rock: 'moss' | 'lavender';
   props: Partial<Record<'shell' | 'arch' | 'star', { on: boolean; position: number }>>;
   visits: Record<VisitorKind, number>; songs: number[];
@@ -50,8 +50,9 @@ function integer(value: unknown, fallback: number, max: number) { return typeof 
 const object = (v: unknown): Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
 export function readGameState(raw: unknown): GameState {
   const s = object(raw);
-  const state: GameState = { version: 1, shells: 8, gentle: false, followPointer: false, friends: {}, found: [], owned: [], theme: 'sea', plant: 'green', rock: 'moss', props: {}, visits: { crab: 0, chest: 0, glow: 0 }, songs: [] };
+  const state: GameState = { version: 1, idleReceipts: [], shells: 8, gentle: false, followPointer: false, friends: {}, found: [], owned: [], theme: 'sea', plant: 'green', rock: 'moss', props: {}, visits: { crab: 0, chest: 0, glow: 0 }, songs: [] };
   if (s.version !== 1) return state;
+  state.idleReceipts = Array.isArray(s.idleReceipts) ? [...new Set(s.idleReceipts.filter((v): v is string => typeof v === 'string' && /^idle-[a-z0-9]{6,30}-[1-9][0-9]{0,9}$/.test(v)))].slice(-256) : [];
   state.shells = integer(s.shells, 8, 99999); state.gentle = s.gentle === true; state.followPointer = s.followPointer === true;
   for (const [id, rawFriend] of Object.entries(object(s.friends)).slice(0, 512)) {
     if (!/^[1-9][0-9]{0,8}$/.test(id)) continue;
@@ -87,6 +88,13 @@ export class AquariumGame {
   constructor(raw?: unknown) { this.state = readGameState(raw); }
   private changed() { this.revision++; this.onChange(); }
   private reward(amount: number) { this.state.shells = Math.min(99999, this.state.shells + amount); }
+  receiveIdle(grant: { id: string; shells: number; items: ShopId[] }) {
+    if (this.state.idleReceipts.includes(grant.id)) return true;
+    this.state.idleReceipts.push(grant.id); this.state.idleReceipts = this.state.idleReceipts.slice(-256);
+    this.reward(integer(grant.shells, 0, 200));
+    for (const id of grant.items) if (SHOP.some(item => item.id === id) && !this.state.owned.includes(id)) this.state.owned.push(id);
+    this.changed(); return true;
+  }
   friend(id: number): FishFriend { return this.state.friends[id] ?? { name: '', bond: 0, rewarded: 0 }; }
   name(id: number, name: string) {
     if (!Number.isSafeInteger(id) || id < 1 || id > 999999999) return;
@@ -120,9 +128,9 @@ export class AquariumGame {
     if (!this.state.gentle || this.time - (this.lastPet.get(id) ?? -Infinity) < 2) return false;
     this.lastPet.set(id, this.time); this.bond(id, 2); return true;
   }
-  meal(fish: Fish) {
+  meal(fish: Fish, manual = false) {
     this.discover('meal');
-    if (this.time - (this.lastMeal.get(fish.id) ?? -Infinity) >= 5) { this.lastMeal.set(fish.id, this.time); this.bond(fish.id, 1); }
+    if (this.time - (this.lastMeal.get(fish.id) ?? -Infinity) >= 5) { this.lastMeal.set(fish.id, this.time); this.bond(fish.id, manual ? 2 : 1); }
   }
   discover(id: string) {
     const entry = JOURNAL.find(j => j.id === id);

@@ -3,8 +3,69 @@ import type { AudioSnapshot } from '../../src/audio';
 import type { Aquarium } from '../../src/simulation';
 import { FISH_PROFILES, FISH_SPECIES, PREDATOR_KINDS } from '../../src/species';
 import type { AquariumGame } from '../../src/game';
-declare global { interface Window { __aquarium: { sim: Aquarium; game: AquariumGame; demonstrating: boolean; audio: AudioSnapshot; width: number; height: number; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
+import type { IdleAquarium } from '../../src/idle';
+declare global { interface Window { __aquarium: { sim: Aquarium; game: AquariumGame; idle: IdleAquarium; demonstrating: boolean; audio: AudioSnapshot; width: number; height: number; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
 const pageErrors = new WeakMap<Page, string[]>();
+
+test('idle return caps rewards, hatches fish and unlocks garden scenery without duplicate claims', async ({ page }, testInfo) => {
+  await page.evaluate(() => {
+    const a = window.__aquarium;
+    a.game.state.found = ['meal','school','escape','station','rest','friend','follow','song','decorate','fish-goldfish','fish-tetra','fish-angelfish','fish-puffer','fish-clownfish']; a.game.name(1, '');
+    a.idle.state.lastSeen = Date.now() - 9 * 3600000; localStorage.setItem('flyfish-idle-v1', JSON.stringify(a.idle.state));
+  });
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  await page.locator('#pause').click(); await page.locator('#tank-open').click(); await page.locator('#idle-open').click();
+  await expect(page.locator('#idle-shell-count')).toContainText('96 / 200'); await expect(page.locator('#idle-level')).toContainText('Lv.4');
+  expect(await page.evaluate(() => window.__aquarium.idle.state.young.length)).toBe(4);
+  await expect(page.locator('#idle-welcome-text')).toContainText('480分');
+  const before = await page.evaluate(() => window.__aquarium.game.state.shells);
+  await page.screenshot({ path: testInfo.outputPath('idle-dashboard.png') });
+  await page.locator('#idle-shell-collect').click(); await page.locator('#idle-harvest').click(); await page.locator('#idle-fairy').click();
+  expect(await page.evaluate(() => window.__aquarium.game.state.shells)).toBe(before + 108);
+  expect(await page.evaluate(() => window.__aquarium.game.state.owned)).toEqual(expect.arrayContaining(['sunset','night','arch','star','pink']));
+  await expect(page.locator('#idle-shell-collect')).toBeDisabled(); await expect(page.locator('#idle-harvest')).toBeDisabled();
+  await page.locator('#idle-garden-kind').selectOption('2'); await page.locator('#idle-auto-feed').uncheck();
+  await page.locator('#idle-nursery').scrollIntoViewIfNeeded(); await page.screenshot({ path: testInfo.outputPath('idle-nursery.png') });
+  await page.locator('#play-close').click(); await page.waitForTimeout(300); await page.screenshot({ path: testInfo.outputPath('idle-grown-tank.png') });
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  expect(await page.evaluate(() => window.__aquarium.game.state.shells)).toBe(before + 108);
+  expect(await page.evaluate(() => window.__aquarium.idle.state.shells)).toBe(0);
+  expect(await page.evaluate(() => window.__aquarium.idle.state.autoFeed)).toBe(false);
+  expect(await page.evaluate(() => window.__aquarium.idle.state.young.length)).toBe(4);
+});
+
+test('auto feeding and a friendly expedition work, return safely and retain their photo', async ({ page }, testInfo) => {
+  await page.evaluate(() => {
+    const a = window.__aquarium; a.sim.settings.stations = 0; a.sim.applySettings(); a.sim.food = []; a.sim.time = 46;
+  });
+  await expect.poll(() => page.evaluate(() => window.__aquarium.sim.food.some(f => f.manual === false))).toBe(true);
+  await page.locator('#pause').click();
+  await page.locator('#fishCount').evaluate((input: HTMLInputElement) => { input.value = '12'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.evaluate(() => {
+    const a = window.__aquarium;
+    a.game.state.found = ['meal','school','escape','station','rest','friend','follow','song','decorate','fish-goldfish','fish-tetra','fish-angelfish','fish-puffer','fish-clownfish'];
+    a.game.state.friends[3] = { name: 'ぽろん', bond: 24, rewarded: 2 }; a.game.name(3, 'ぽろん');
+    a.idle.state.level = 3; a.idle.state.total = 3600; a.idle.state.discoveries = 7; a.idle.onChange();
+  });
+  await page.locator('#idle-open').click(); await page.locator('#idle-trip-fish').selectOption('3'); await page.locator('#idle-trip-route').selectOption('1'); await page.locator('#idle-trip-start').click();
+  expect(await page.evaluate(() => window.__aquarium.idle.isAway(3))).toBe(true);
+  await page.locator('[data-play-tab="friends"]').click(); await page.locator('#friend-fish').selectOption('3');
+  await expect(page.locator('#friend-call')).toBeDisabled(); await expect(page.locator('#friend-call-hint')).toContainText('探検中');
+  await page.locator('[data-play-tab="music"]').click(); await expect(page.locator('[data-start-phrase="0"]')).toBeDisabled();
+  await page.evaluate(() => { const a = window.__aquarium; a.idle.state.lastSeen = Date.now() - 4 * 3600000; localStorage.setItem('flyfish-idle-v1', JSON.stringify(a.idle.state)); });
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready); await page.locator('#idle-open').click();
+  expect(await page.evaluate(() => window.__aquarium.idle.isAway(3))).toBe(false);
+  await expect(page.locator('#idle-trip-receive')).toBeEnabled();
+  const before = await page.evaluate(() => window.__aquarium.game.state.shells);
+  await page.locator('#idle-trip-receive').click(); await expect(page.locator('#idle-souvenirs')).toContainText('星砂の小瓶');
+  expect(await page.evaluate(() => window.__aquarium.game.state.shells)).toBe(before + 30);
+  await expect(page.locator('#idle-photos svg')).toHaveCount(1); await page.locator('#idle-photos').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('idle-expedition.png') });
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  expect(await page.evaluate(() => window.__aquarium.idle.state.photos.length)).toBe(1);
+  expect(await page.evaluate(() => window.__aquarium.idle.state.journey)).toBeNull();
+  expect(await page.evaluate(() => window.__aquarium.game.state.shells)).toBe(before + 30);
+});
 
 test('cursor attracts nearby fish, leaves frightened fish alone and clears after leaving the tank', async ({ page }, testInfo) => {
   await page.locator('#pause').click(); await page.locator('#play-open').click();
@@ -48,7 +109,7 @@ test('cursor attracts nearby fish, leaves frightened fish alone and clears after
 test('play menu explains choices and starts gentle petting from a labelled action', async ({ page }, testInfo) => {
   await page.locator('#play-open').click();
   await expect(page.locator('[data-play-panel="home"]')).toBeVisible();
-  await expect(page.locator('.play-menu button')).toHaveCount(5);
+  await expect(page.locator('.play-menu button')).toHaveCount(6);
   await page.screenshot({ path: testInfo.outputPath('game-menu.png') });
   await page.locator('[data-play-route="friends"]').click();
   await expect(page.locator('#friend-call')).toBeDisabled();
@@ -158,7 +219,7 @@ test('notebook handles corrupt storage and fits a narrow screen without leaving 
   await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
   expect(await page.evaluate(() => window.__aquarium.game.state.owned)).toEqual([]);
   await page.setViewportSize({ width: 320, height: 640 }); await page.locator('#tank-open').click(); await page.locator('#play-open').click();
-  for (const tab of ['home', 'friends', 'music', 'journal', 'decor', 'visitors']) {
+  for (const tab of ['home', 'friends', 'music', 'journal', 'decor', 'visitors', 'idle']) {
     await page.locator(`[data-play-tab="${tab}"]`).click();
     expect(await page.locator('#play-notebook').evaluate(e => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
   }
