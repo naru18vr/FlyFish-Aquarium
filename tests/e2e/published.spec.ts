@@ -24,7 +24,7 @@ test('published notebook discovers fish and exchanges shells for a lasting decor
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('./?tank&debug'); await page.waitForFunction(() => window.__aquarium?.game.state.found.length >= 5);
   await page.locator('#play-open').click(); await expect(page.locator('#play-notebook')).toBeVisible();
-  await page.locator('#friend-name').fill('ぽろん'); await page.locator('#friend-name-form button').click();
+  await page.locator('[data-play-route="friends"]').click(); await page.locator('#friend-name').fill('ぽろん'); await page.locator('#friend-name-form button').click();
   await page.locator('[data-play-tab="journal"]').click(); expect(await page.locator('.journal-entry.found').count()).toBeGreaterThanOrEqual(5);
   await page.screenshot({ path: testInfo.outputPath('published-game-notebook.png') });
   await page.locator('[data-play-tab="decor"]').click(); await page.locator('[data-buy="shell"]').click();

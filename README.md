@@ -136,3 +136,8 @@ python scripts/extract_connectome.py --cache .cache/flywire
 - Lin et al. (2024), *Network statistics of the whole-brain connectome of Drosophila*. https://doi.org/10.1038/s41586-024-07968-y
 
 アプリ内の「データ出典とライセンス」からも確認できます。商用利用時は、コードのMIT許諾に加えて、FlyWireデータについて別途許諾を確認してください。
+
+
+### 遊びの入口と操作
+
+水槽右上の「遊びノート」を開くと、5つの遊びを説明付きで選べます。「魚となかよし」→「水槽でなでる」でなでるモードをオンにして水槽へ戻ります。名前の保存結果、呼び寄せに必要な仲良し度、交換に不足している貝殻を画面に表示します。水槽モードのボタンには日本語ラベルがあり、休止・再開や音のオン・オフの状態も見えます。

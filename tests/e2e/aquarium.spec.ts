@@ -6,19 +6,41 @@ import type { AquariumGame } from '../../src/game';
 declare global { interface Window { __aquarium: { sim: Aquarium; game: AquariumGame; demonstrating: boolean; audio: AudioSnapshot; width: number; height: number; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
 const pageErrors = new WeakMap<Page, string[]>();
 
+test('play menu explains choices and starts gentle petting from a labelled action', async ({ page }, testInfo) => {
+  await page.locator('#play-open').click();
+  await expect(page.locator('[data-play-panel="home"]')).toBeVisible();
+  await expect(page.locator('.play-menu button')).toHaveCount(5);
+  await page.screenshot({ path: testInfo.outputPath('game-menu.png') });
+  await page.locator('[data-play-route="friends"]').click();
+  await expect(page.locator('#friend-call')).toBeDisabled();
+  await expect(page.locator('#friend-call-hint')).toContainText('あと');
+  await page.locator('#play-close').click(); await page.locator('#inspect-mode').click();
+  await page.locator('#play-open').click(); await page.locator('[data-play-route="friends"]').click(); await page.locator('#friend-pet').click();
+  await expect(page.locator('#inspect-mode')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#play-notebook')).not.toBeVisible();
+  expect(await page.evaluate(() => window.__aquarium.game.state.gentle)).toBe(true);
+  await expect(page.locator('#fish-touch-guide')).toHaveText('魚をなでる');
+  await page.locator('#tank-open').click();
+  for (const id of ['tank-feed', 'tank-inspect', 'tank-pause', 'tank-sound', 'tank-exit']) {
+    await expect(page.locator(`#${id}`)).not.toHaveText('');
+  }
+  expect(await page.locator('#tank-controls').evaluate(e => e.getBoundingClientRect().right <= innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('clear-tank-controls.png') });
+});
+
 test('notebook names and gentle friendship persist, and friends can be called', async ({ page }, testInfo) => {
   await page.locator('#pause').click();
   await page.evaluate(() => { const g = window.__aquarium.game; g.state.friends[1] = { name: '', bond: 8, rewarded: 1 }; g.name(1, ''); });
-  await page.locator('#play-open').click(); await page.locator('#gentle-mode').check();
+  await page.locator('#play-open').click(); await page.locator('[data-play-route="friends"]').click(); await page.locator('#gentle-mode').check();
   await page.locator('#friend-fish').selectOption('1'); await page.locator('#friend-name').fill('ぽろん');
   await page.locator('#friend-name-form button').click(); await expect(page.locator('#friend-caption')).toContainText('ぽろん');
   await page.locator('#play-close').click(); await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('Enter');
   expect(await page.evaluate(() => window.__aquarium.game.friend(1).bond)).toBe(10);
   expect(await page.evaluate(() => Math.max(window.__aquarium.sim.fish[0].startleLeft, window.__aquarium.sim.fish[0].startleRight))).toBeLessThan(.1);
-  await page.locator('#play-open').click(); await page.locator('#friend-call').click();
+  await page.locator('#play-open').click(); await page.locator('[data-play-route="friends"]').click(); await page.locator('#friend-call').click();
   expect(await page.evaluate(() => window.__aquarium.game.call)).not.toBeNull();
   await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
-  await page.locator('#play-open').click(); await expect(page.locator('#friend-caption')).toContainText('ぽろん'); await expect(page.locator('#gentle-mode')).toBeChecked();
+  await page.locator('#play-open').click(); await page.locator('[data-play-route="friends"]').click(); await expect(page.locator('#friend-caption')).toContainText('ぽろん'); await expect(page.locator('#gentle-mode')).toBeChecked();
   expect(await page.evaluate(() => window.__aquarium.game.friend(1).bond)).toBeGreaterThanOrEqual(10);
   await page.screenshot({ path: testInfo.outputPath('game-friendship.png') });
 });
@@ -96,7 +118,7 @@ test('notebook handles corrupt storage and fits a narrow screen without leaving 
   await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
   expect(await page.evaluate(() => window.__aquarium.game.state.owned)).toEqual([]);
   await page.setViewportSize({ width: 320, height: 640 }); await page.locator('#tank-open').click(); await page.locator('#play-open').click();
-  for (const tab of ['friends', 'music', 'journal', 'decor', 'visitors']) {
+  for (const tab of ['home', 'friends', 'music', 'journal', 'decor', 'visitors']) {
     await page.locator(`[data-play-tab="${tab}"]`).click();
     expect(await page.locator('#play-notebook').evaluate(e => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
   }

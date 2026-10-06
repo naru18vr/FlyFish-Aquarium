@@ -6,3 +6,19 @@
 .music-hud{background:#163c43b3;pointer-events:none}.music-hud button{pointer-events:auto}.friend-card progress{appearance:none;-webkit-appearance:none;border:0;border-radius:6px;background:#dfe8d3;overflow:hidden}.play-header{position:sticky;top:-24px;background:#fafbf5;z-index:1;padding-top:6px}.play-header h2{padding-bottom:6px}
 @media(max-width:520px){.play-header{top:-18px}}
 .play-open:hover{color:#e0e9c8}.visitor-catch:hover{color:#f4deaf;background:#4e6163}
+
+/* Clear entry points and readable actions. */
+.play-open{min-height:44px;font-size:13px}.play-open span{font-size:11px}
+#play-notebook{font-size:14px}.play-header .eyebrow{display:none}.play-header h2{font-size:25px}
+.play-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.play-tabs button{min-width:0;min-height:44px;font-size:13px}
+#play-notebook p{font-size:13px;color:#58694f}.play-wallet span{color:#70664b}
+.play-menu{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:20px 0}
+.play-menu button{position:relative;display:grid;grid-template-columns:32px minmax(0,1fr);gap:6px 10px;text-align:left;border:1px solid #c8d8b7;border-radius:10px;background:#f0f5e7;padding:18px 30px 18px 15px;color:#45633d;min-height:100px}
+.play-menu button:hover{background:#e3edda;border-color:#96b57a}.play-menu button>span{grid-row:1/3;font-size:26px;color:#7c995d}.play-menu strong{font-size:15px;font-weight:600}.play-menu small{font-size:12px;line-height:1.7;color:#637455}.play-menu b{position:absolute;right:12px;top:18px;font-weight:400}
+#play-notebook .play-help{padding:14px;border:1px solid #d9dec6;background:#f5f2e0;border-radius:8px;font-size:13px;line-height:1.8;color:#665f40}#play-notebook .play-help p{margin:7px 0 0}
+#play-notebook .play-primary{display:inline-flex;align-items:center;min-height:44px;padding:10px 16px;background:#557b44;border:1px solid #557b44;border-radius:7px;color:#fff;font-size:14px;margin:8px 8px 12px 0}#play-notebook .play-primary:hover{background:#456536}
+.play-details{margin-top:16px}.play-details summary{cursor:pointer;font-size:13px;min-height:44px;display:list-item;padding:12px 0;color:#526d44}
+#play-notebook .action-hint{font-size:12px;margin:10px 0 0;color:#65724f}
+.friend-picker select,#friend-name{font-size:14px;min-height:44px}.friend-card button,.play-card-list button,.play-base{font-size:13px;min-height:44px}
+#play-notebook .play-card-list p,#play-notebook .journal-entry p{font-size:12px}.play-card-list h4,.journal-entry h4{font-size:14px;font-weight:600}.play-card-list small,.journal-entry small{color:#637455}
+@media(max-width:520px){.play-open{font-size:12px;gap:5px}.tank-view .play-open{font-size:12px}.play-open span{font-size:10px}.play-menu{grid-template-columns:1fr;gap:9px;margin:14px 0}.play-menu button{min-height:83px;padding-top:14px;padding-bottom:14px}.play-tabs button{font-size:12px;padding:8px 4px}.play-card-list article{flex-wrap:wrap}.play-card-list article>div{flex-basis:calc(100% - 40px)}.play-card-list button{margin-left:auto}.play-header h2{font-size:23px}}

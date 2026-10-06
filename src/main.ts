@@ -94,6 +94,10 @@ const playFish = (id: number, point: { x: number; y: number }) => {
   void sound.fish(id, point.x / WIDTH * 1.4 - .7).then(note => { if (note) renderer.effect(position, 'note', note.midi); });
 };
 let paused = false, inspecting = false, ready = false, busy = false, workerMs = 0, brainTime = 0;
+play.onPet = () => {
+  game.stopPhrase(); play.onClose(); sim.selected = null; inspecting = false; ui.inspecting(false); ui.inspector(undefined, 0);
+  ui.toast('魚をタップしてなでよう。空いている場所は餌やりです');
+};
 let worker: Worker | null = null, brainFailed = false;
 let revision = 0, workerTimer = 0;
 const fallback = () => {
