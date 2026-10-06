@@ -30,7 +30,16 @@ test('a musical phrase demos, guides notes and rewards a complete keyboard perfo
   expect(await page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(3);
   await page.locator('#tank canvas').focus(); await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('Enter');
   await expect(page.locator('#music-instruction')).toContainText('(1/3)');
-  await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('Enter');
+  await expect(page.locator('#inspector')).toBeHidden();
+  // Informational HUD content must allow fish underneath to be tapped.
+  const point = await page.evaluate(() => {
+    const a = window.__aquarium, r = document.querySelector('canvas')!.getBoundingClientRect();
+    const p = { x: 90 / r.width * a.width, y: 110 / r.height * a.height };
+    for (const f of a.sim.fish) if (f.id !== 3 && Math.hypot(f.x - p.x, f.y - p.y) < 55) { f.x = a.width * .8; f.y = a.height * .5 + f.id * 4; }
+    Object.assign(a.sim.fish.find(f => f.id === 3)!, p);
+    return { x: r.left + 90, y: r.top + 110 };
+  });
+  await page.mouse.click(point.x, point.y); await expect(page.locator('#music-instruction')).toContainText('(2/3)');
   await page.screenshot({ path: testInfo.outputPath('game-melody.png') });
   await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('Enter');
   await expect(page.locator('#music-hud')).toBeHidden(); expect(await page.evaluate(() => window.__aquarium.game.state.songs)).toEqual([0]);
@@ -320,9 +329,9 @@ test('starts live, changes counts and presets, pauses, and opens credits', async
   expect(await page.evaluate(() => window.__aquarium.sim.time)).toBe(before);
   await page.locator('#pause').click(); await page.locator('#settings-reset').click();
   await expect(page.locator('#metric-brain')).toHaveText('70%');
-  await page.locator('#credits-open').click(); await expect(page.locator('dialog')).toBeVisible();
-  await expect(page.locator('dialog')).toContainText('CC BY-NC 4.0');
-  await page.locator('#about-close').click(); await expect(page.locator('dialog')).not.toBeVisible();
+  await page.locator('#credits-open').click(); await expect(page.locator('#about')).toBeVisible();
+  await expect(page.locator('#about')).toContainText('CC BY-NC 4.0');
+  await page.locator('#about-close').click(); await expect(page.locator('#about')).not.toBeVisible();
   await page.waitForTimeout(600);
   await page.screenshot({ path: testInfo.outputPath('aquarium.png'), fullPage: true });
   expect(errors).toEqual([]);

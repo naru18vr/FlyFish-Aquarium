@@ -130,7 +130,7 @@ function syncTankSize() {
   const size = ui.tankActive ? tankSize(tank.clientWidth, tank.clientHeight) : { width: BASE_WIDTH, height: BASE_HEIGHT };
   if (size.width !== WIDTH || size.height !== HEIGHT) {
     if (game.call) { game.call.x *= size.width / WIDTH; game.call.y *= size.height / HEIGHT; }
-    sim.resize(size.width, size.height); renderer.resize();
+    sim.resize(size.width, size.height); renderer.resize(sim);
   }
 }
 ui.onTankMode = () => {
@@ -192,7 +192,7 @@ async function start() {
     if (action === 'scare') { renderer.effect(point, action); ui.toast('びっくり！ 刺激が神経回路へ伝わりました'); }
     else if (action === 'feed') { renderer.effect(point, action); void sound.feed(); game.callFriends(point); ui.toast('餌がゆっくり沈んでいきます'); }
     play.refresh();
-    ui.inspector(sim.fish.find(f => f.id === sim.selected), workerMs);
+    ui.inspector(game.phrase ? undefined : sim.fish.find(f => f.id === sim.selected), workerMs);
   });
   renderer.app.canvas.addEventListener('keydown', event => {
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
@@ -200,7 +200,7 @@ async function start() {
       const index = sim.fish.findIndex(f => f.id === sim.selected);
       const delta = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
       sim.selected = sim.fish[(index < 0 ? delta > 0 ? 0 : sim.fish.length - 1 : (index + delta + sim.fish.length) % sim.fish.length)].id;
-      ui.inspector(sim.fish.find(f => f.id === sim.selected), workerMs);
+      ui.inspector(game.phrase ? undefined : sim.fish.find(f => f.id === sim.selected), workerMs);
     } else if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       const fish = sim.fish.find(f => f.id === sim.selected);
@@ -233,7 +233,7 @@ async function start() {
     pausedRenderTime += elapsed;
     if (!document.hidden && (!paused || pausedRenderTime >= .2)) { renderer.render(sim, paused ? 0 : dt, Math.min(pausedRenderTime, .25)); pausedRenderTime = 0; frames++; }
     uiTime += dt; fpsTime += elapsed;
-    if (uiTime >= .2) { uiTime = 0; ui.inspector(sim.fish.find(f => f.id === sim.selected), workerMs); play.refresh(); }
+    if (uiTime >= .2) { uiTime = 0; ui.inspector(game.phrase ? undefined : sim.fish.find(f => f.id === sim.selected), workerMs); play.refresh(); }
     if (fpsTime >= 1) { document.querySelector('#fps')!.textContent = String(Math.round(frames / fpsTime)); frames = 0; fpsTime = 0; }
     requestAnimationFrame(frame);
   }

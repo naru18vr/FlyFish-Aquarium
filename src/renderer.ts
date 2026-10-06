@@ -64,7 +64,7 @@ export class AquariumRenderer {
     this.app.stop();
     this.initialized = true;
   }
-  resize() {
+  resize(sim: Aquarium) {
     if (!this.initialized) return;
     const oldWidth = this.app.renderer.width, oldHeight = this.app.renderer.height;
     this.app.renderer.resize(WIDTH, HEIGHT);
@@ -73,6 +73,8 @@ export class AquariumRenderer {
     this.drawBackground(); this.drawPlants(); this.settingsKey = ''; this.propKey = '';
     for (const bubble of this.bubblePoints) { bubble.x *= WIDTH / oldWidth; bubble.y *= HEIGHT / oldHeight; }
     this.ripple = [];
+    // Resizing clears the drawing buffer; draw now even while paused.
+    this.render(sim, 0, 0);
   }
   private drawBackground() {
     const g = new Graphics();
