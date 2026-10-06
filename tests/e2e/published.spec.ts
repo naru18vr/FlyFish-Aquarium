@@ -20,6 +20,18 @@ async function capturedPeak(page: Page) {
   });
 }
 
+test('published mode switch shows the applied state and persists pet mode', async ({ page }, testInfo) => {
+  await page.goto('./?tank&debug'); await page.waitForFunction(() => window.__aquarium?.ready);
+  await expect(page.locator('#current-mode')).toHaveText('つつくモード');
+  await page.locator('#mode-toggle').click(); await page.locator('[data-interaction-mode="pet"]').click();
+  await expect(page.locator('#current-mode')).toHaveText('なでるモード');
+  expect(await page.evaluate(() => window.__aquarium.game.state.gentle)).toBe(true);
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  await expect(page.locator('#current-mode')).toHaveText('なでるモード');
+  await page.locator('#mode-toggle').click(); await expect(page.locator('[data-interaction-mode="pet"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.screenshot({ path: testInfo.outputPath('published-mode-picker.png') });
+});
+
 test('published idle aquarium earns a bounded return and saves a harvest and hatch', async ({ page }, testInfo) => {
   await page.goto('./?tank&debug'); await page.waitForFunction(() => window.__aquarium?.ready);
   await page.evaluate(() => { const a = window.__aquarium; a.idle.state.lastSeen = Date.now() - 3600000; localStorage.setItem('flyfish-idle-v1', JSON.stringify(a.idle.state)); });

@@ -70,7 +70,7 @@ export class UI {
       const input = document.getElementById(key) as HTMLInputElement;
       this.onSetting(key, Math.min(+input.max, Math.max(+input.min, this.settings[key] + +(button.dataset.delta!)))); this.sync();
     });
-    document.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach(button => button.onclick = () => { this.onSetting('flyWeight', +button.dataset.preset!); this.sync(); });
+    document.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach(button => button.onclick = () => { this.onSetting('flyWeight', +button.dataset.preset!); this.sync(); this.toast(`反映しました：${this.settingsModeLabel()}`); });
     document.querySelector<HTMLButtonElement>('#predator-mix')!.onclick = () => { this.onSetting('predatorKind', 'mixed'); this.onSetting('predators', Math.max(3, this.settings.predators)); this.sync(); this.toast('サメ・クラゲ・イカが登場！'); };
     document.querySelector<HTMLButtonElement>('#pause')!.onclick = () => this.onPause();
     document.querySelector<HTMLButtonElement>('#reset')!.onclick = () => this.onReset();
@@ -99,7 +99,7 @@ export class UI {
       if (this.ownsFullscreen && !document.fullscreenElement) { this.ownsFullscreen = false; this.tankMode(false); }
     });
     document.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && this.tankActive && !document.querySelector('dialog[open]')) { event.preventDefault(); event.stopPropagation(); this.tankMode(false); }
+      if (event.key === 'Escape' && this.tankActive && !document.querySelector('dialog[open]') && !document.querySelector('#mode-picker:not([hidden])')) { event.preventDefault(); event.stopPropagation(); this.tankMode(false); }
     }, true);
     const about = document.querySelector<HTMLDialogElement>('#about')!;
     for (const id of ['about-open', 'credits-open']) document.querySelector<HTMLButtonElement>(`#${id}`)!.onclick = () => about.showModal();
@@ -121,14 +121,19 @@ export class UI {
     document.querySelector('#metric-brain')!.textContent = `${Math.round(this.settings.flyWeight * 100)}%`;
     document.querySelector('#metric-fish')!.textContent = String(this.settings.fishCount);
     document.querySelector('#tank-fish-count')!.textContent = String(this.settings.fishCount);
-    document.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach(button => button.classList.toggle('active', +button.dataset.preset! === this.settings.flyWeight));
+    document.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach(button => { const active = +button.dataset.preset! === this.settings.flyWeight; button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active)); });
     document.querySelectorAll<HTMLButtonElement>('[data-step]').forEach(button => {
       const input = document.getElementById(button.dataset.step!) as HTMLInputElement;
       button.disabled = +button.dataset.delta! < 0 ? +input.value <= +input.min : +input.value >= +input.max;
     });
     document.querySelector('#predator-kind-help')!.textContent = this.settings.predatorKind === 'mixed' ? this.settings.predators < 3 ? '3匹以上にすると、3種類が登場します。' : 'サメは追跡、クラゲは漂い、イカはダッシュ。' : PREDATOR_PROFILES[this.settings.predatorKind].description;
-    document.querySelector('#tank-mode')!.textContent = this.settings.flyWeight === 0 ? 'PROGRAM ECOSYSTEM' : this.settings.flyWeight === 1 ? 'FLY BRAIN ECOSYSTEM' : 'HYBRID ECOSYSTEM';
+    document.querySelector('#tank-mode')!.textContent = this.settingsModeLabel();
+    let status = document.querySelector('#brain-mode-status');
+    if (!status) { document.querySelector('.preset-buttons')!.insertAdjacentHTML('afterend', '<p id="brain-mode-status" class="brain-mode-status" role="status"></p>'); status = document.querySelector('#brain-mode-status'); }
+    status!.textContent = `選択中：${this.settingsModeLabel()} · 水槽に反映済み`;
   }
+  settingsModeLabel() { const fly = Math.round(this.settings.flyWeight * 100); return `${fly === 0 ? 'プログラム' : fly === 100 ? 'ハエ脳' : 'ブレンド'} · ハエ脳${fly}% / プログラム${100 - fly}%`; }
+  touchModeHelp() { return this.settings.scare ? '魚をタップするとびっくり。空いている場所は餌やり。' : '魚をタップして音を鳴らします。驚かせる設定はオフ。空いている場所は餌やり。'; }
   tankMode(active: boolean) {
     if (active === this.tankActive) return;
     if (active) { this.returnFocus = document.activeElement as HTMLElement; this.returnScroll = window.scrollY; }

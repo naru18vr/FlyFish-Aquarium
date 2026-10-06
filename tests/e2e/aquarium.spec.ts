@@ -7,6 +7,36 @@ import type { IdleAquarium } from '../../src/idle';
 declare global { interface Window { __aquarium: { sim: Aquarium; game: AquariumGame; idle: IdleAquarium; demonstrating: boolean; audio: AudioSnapshot; width: number; height: number; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
 const pageErrors = new WeakMap<Page, string[]>();
 
+test('current mode matches applied controls and remains clear after reload and pause', async ({ page }, testInfo) => {
+  await expect(page.locator('#current-mode')).toHaveText('つつくモード');
+  await page.locator('[data-preset=".9"]').click();
+  await expect(page.locator('[data-preset=".9"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#brain-mode-status')).toContainText('ハエ脳90% / プログラム10%');
+  expect(await page.evaluate(() => window.__aquarium.sim.settings.flyWeight)).toBe(.9);
+  await page.locator('#mode-toggle').click(); await page.locator('[data-interaction-mode="pet"]').click();
+  await expect(page.locator('#current-mode')).toHaveText('なでるモード');
+  expect(await page.evaluate(() => window.__aquarium.game.state.gentle)).toBe(true);
+  await page.locator('#play-open').click(); await expect(page.locator('#play-current-mode')).toContainText('なでるモード');
+  await page.locator('[data-play-route="friends"]').click(); await expect(page.locator('#friend-pet')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#play-close').click(); await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  await expect(page.locator('#current-mode')).toHaveText('なでるモード');
+  await page.locator('#tank-open').click(); await page.locator('#mode-toggle').click(); await page.locator('[data-interaction-mode="follow"]').click();
+  await expect(page.locator('#current-mode')).toHaveText('一緒に泳ぐモード');
+  expect(await page.evaluate(() => [window.__aquarium.game.state.gentle, window.__aquarium.game.state.followPointer])).toEqual([false, true]);
+  await page.locator('#mode-toggle').click(); await page.locator('[data-interaction-mode="inspect"]').click();
+  await expect(page.locator('#current-mode')).toHaveText('脳を見るモード'); await expect(page.locator('#tank-inspect')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#tank-pause').click(); await page.locator('#mode-toggle').click();
+  await expect(page.locator('#mode-running')).toContainText('休止中');
+  await expect(page.locator('[data-interaction-mode="inspect"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.screenshot({ path: testInfo.outputPath('current-mode-picker.png') });
+  await page.keyboard.press('Escape'); await expect(page.locator('#mode-picker')).toBeHidden(); await expect(page.locator('body')).toHaveClass('tank-view');
+  await page.locator('#mode-toggle').click(); await page.locator('[data-interaction-mode="touch"]').click();
+  await expect(page.locator('#current-mode')).toHaveText('つつくモード'); await expect(page.locator('#tank-inspect')).toHaveAttribute('aria-pressed', 'false');
+  await page.setViewportSize({ width: 320, height: 640 }); await page.locator('#mode-toggle').click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const box = (await page.locator('#mode-picker').boundingBox())!; expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(320);
+});
+
 test('idle return caps rewards, hatches fish and unlocks garden scenery without duplicate claims', async ({ page }, testInfo) => {
   await page.evaluate(() => {
     const a = window.__aquarium;

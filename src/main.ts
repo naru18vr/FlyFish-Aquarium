@@ -12,6 +12,7 @@ import { AquariumGame, GAME_KEY } from './game';
 import { GameUI } from './game-ui';
 import { IdleAquarium, IDLE_KEY } from './idle';
 import { IdleUI } from './idle-ui';
+import { ModeUI } from './mode-ui';
 import { distance, safePosition } from './math';
 
 // Preserve only recognized, bounded values. Storage may be unavailable in private mode.
@@ -44,6 +45,7 @@ const game = new AquariumGame(savedGame), play = new GameUI(game, sim);
 let savedIdle: unknown;
 try { savedIdle = JSON.parse(localStorage.getItem(IDLE_KEY) || 'null'); } catch { /* Optional storage. */ }
 const idle = new IdleAquarium(savedIdle), idleUI = new IdleUI(idle, game, sim, play);
+const modes = new ModeUI(game, ui);
 let lastAway = idle.state.journey?.fishId ?? null;
 idle.onChange = () => {
   const away = idle.state.journey && idle.isAway(idle.state.journey.fishId) ? idle.state.journey.fishId : null;
@@ -109,6 +111,15 @@ const playFish = (id: number, point: { x: number; y: number }) => {
   void sound.fish(id, point.x / WIDTH * 1.4 - .7).then(note => { if (note) renderer.effect(position, 'note', note.midi); });
 };
 let paused = false, inspecting = false, ready = false, busy = false, workerMs = 0, brainTime = 0;
+modes.onSelect = mode => {
+  game.stopPhrase(); game.call = null; game.clearPointer(); play.onClose(); sim.selected = null;
+  const gentle = mode === 'pet', follow = mode === 'follow';
+  if (game.state.gentle !== gentle) game.toggleGentle();
+  if (game.state.followPointer !== follow) game.toggleFollow();
+  inspecting = mode === 'inspect'; ui.inspecting(inspecting); ui.inspector(undefined, 0);
+  play.refresh(true); modes.refresh(); ui.toast(`切り替えました：${document.querySelector('#current-mode')!.textContent}`);
+};
+modes.refresh();
 play.onFollow = () => {
   game.stopPhrase(); game.call = null; play.onClose(); sim.selected = null; inspecting = false; ui.inspecting(false); ui.inspector(undefined, 0);
   ui.toast('水槽の中でマウスをゆっくり動かしてみよう');
@@ -146,7 +157,7 @@ ui.onSetting = (key, value) => {
 ui.onPause = () => { paused = !paused; ui.pause(paused); sound.pause(paused); };
 ui.onReset = () => { game.stopPhrase(); game.call = null; game.clearPointer(); play.onClose(); sim.reset(); restartBrain(); send({ type: 'reset', revision }); ui.inspector(undefined, 0); ui.toast('新しいひと泳ぎ、はじまり。'); };
 ui.onFeed = () => { sim.feed(WIDTH * (.3 + Math.random() * .4)); void sound.feed(); ui.toast('餌をひとつまみ。集まってくるかな？'); };
-ui.onInspect = () => { game.clearPointer(); inspecting = !inspecting; ui.inspecting(inspecting); if (inspecting) ui.toast('気になる魚をタップして、脳をのぞこう'); };
+ui.onInspect = () => { game.stopPhrase(); play.onClose(); game.clearPointer(); inspecting = !inspecting; ui.inspecting(inspecting); modes.refresh(); ui.toast(inspecting ? '脳を見るモード：気になる魚をタップしてね' : `戻りました：${document.querySelector('#current-mode')!.textContent}`); };
 ui.onCloseInspector = () => { sim.selected = null; ui.inspector(undefined, 0); };
 function syncTankSize() {
   const tank = document.querySelector<HTMLElement>('#tank')!;
@@ -287,7 +298,7 @@ async function start() {
     pausedRenderTime += elapsed;
     if (!document.hidden && (!paused || pausedRenderTime >= .2)) { renderer.render(sim, paused ? 0 : dt, Math.min(pausedRenderTime, .25)); pausedRenderTime = 0; frames++; }
     uiTime += dt; fpsTime += elapsed;
-    if (uiTime >= .2) { uiTime = 0; ui.inspector(game.phrase ? undefined : sim.fish.find(f => f.id === sim.selected), workerMs); play.refresh(); }
+    if (uiTime >= .2) { uiTime = 0; ui.inspector(game.phrase ? undefined : sim.fish.find(f => f.id === sim.selected), workerMs); play.refresh(); modes.refresh(); }
     if (fpsTime >= 1) { document.querySelector('#fps')!.textContent = String(Math.round(frames / fpsTime)); frames = 0; fpsTime = 0; }
     requestAnimationFrame(frame);
   }
