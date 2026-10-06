@@ -44,7 +44,7 @@ renderer.game = game;
 game.onNotice = message => { ui.toast(message); play.message(message); };
 game.onChange = () => { try { localStorage.setItem(GAME_KEY, JSON.stringify(game.state)); } catch { play.storageUnavailable(); } };
 sim.onEat = fish => game.meal(fish);
-sim.companion = fish => game.call && game.friend(fish.id).bond >= 8 && fish.fear < .3 ? game.call : null;
+sim.companion = fish => inspecting ? null : game.followTarget(fish);
 play.onFeed = () => ui.onFeed();
 play.onCall = id => {
   const fish = sim.fish.find(f => f.id === id);
@@ -86,14 +86,19 @@ ui.onSoundPreview = () => {
   sound.change('enabled', true); sound.change('effects', true); saveSound();
   void sound.fish(3).then(note => { if (note) renderer.effect({ x: WIDTH / 2, y: HEIGHT / 2 }, 'note', note.midi); });
 };
-document.addEventListener('visibilitychange', () => { sound.visibility(document.hidden); if (document.hidden) play.onClose(); });
-window.addEventListener('pagehide', () => { sound.visibility(true); play.onClose(); });
+document.addEventListener('visibilitychange', () => { sound.visibility(document.hidden); if (document.hidden) { game.clearPointer(); play.onClose(); } });
+window.addEventListener('blur', () => game.clearPointer());
+window.addEventListener('pagehide', () => { game.clearPointer(); sound.visibility(true); play.onClose(); });
 window.addEventListener('pageshow', () => sound.visibility(document.hidden));
 const playFish = (id: number, point: { x: number; y: number }) => {
   const position = { ...point };
   void sound.fish(id, point.x / WIDTH * 1.4 - .7).then(note => { if (note) renderer.effect(position, 'note', note.midi); });
 };
 let paused = false, inspecting = false, ready = false, busy = false, workerMs = 0, brainTime = 0;
+play.onFollow = () => {
+  game.stopPhrase(); game.call = null; play.onClose(); sim.selected = null; inspecting = false; ui.inspecting(false); ui.inspector(undefined, 0);
+  ui.toast('水槽の中でマウスをゆっくり動かしてみよう');
+};
 play.onPet = () => {
   game.stopPhrase(); play.onClose(); sim.selected = null; inspecting = false; ui.inspecting(false); ui.inspector(undefined, 0);
   ui.toast('魚をタップしてなでよう。空いている場所は餌やりです');
@@ -125,19 +130,21 @@ ui.onSetting = (key, value) => {
   if (key === 'quality') { restartBrain(); send({ type: 'quality', revision, quality: settings.quality }); }
 };
 ui.onPause = () => { paused = !paused; ui.pause(paused); sound.pause(paused); };
-ui.onReset = () => { game.stopPhrase(); game.call = null; play.onClose(); sim.reset(); restartBrain(); send({ type: 'reset', revision }); ui.inspector(undefined, 0); ui.toast('新しいひと泳ぎ、はじまり。'); };
+ui.onReset = () => { game.stopPhrase(); game.call = null; game.clearPointer(); play.onClose(); sim.reset(); restartBrain(); send({ type: 'reset', revision }); ui.inspector(undefined, 0); ui.toast('新しいひと泳ぎ、はじまり。'); };
 ui.onFeed = () => { sim.feed(WIDTH * (.3 + Math.random() * .4)); void sound.feed(); ui.toast('餌をひとつまみ。集まってくるかな？'); };
-ui.onInspect = () => { inspecting = !inspecting; ui.inspecting(inspecting); if (inspecting) ui.toast('気になる魚をタップして、脳をのぞこう'); };
+ui.onInspect = () => { game.clearPointer(); inspecting = !inspecting; ui.inspecting(inspecting); if (inspecting) ui.toast('気になる魚をタップして、脳をのぞこう'); };
 ui.onCloseInspector = () => { sim.selected = null; ui.inspector(undefined, 0); };
 function syncTankSize() {
   const tank = document.querySelector<HTMLElement>('#tank')!;
   const size = ui.tankActive ? tankSize(tank.clientWidth, tank.clientHeight) : { width: BASE_WIDTH, height: BASE_HEIGHT };
   if (size.width !== WIDTH || size.height !== HEIGHT) {
+    game.clearPointer();
     if (game.call) { game.call.x *= size.width / WIDTH; game.call.y *= size.height / HEIGHT; }
     sim.resize(size.width, size.height); renderer.resize(sim);
   }
 }
 ui.onTankMode = () => {
+  game.clearPointer();
   sim.selected = null; inspecting = false; ui.inspecting(false); ui.inspector(undefined, 0);
   syncTankSize();
 };
@@ -178,7 +185,18 @@ async function start() {
   document.querySelector('#loading')!.remove();
   new ResizeObserver(syncTankSize).observe(document.querySelector('#tank')!);
   syncTankSize();
-  renderer.app.canvas.addEventListener('pointerdown', event => {
+  let touchStart: { x: number; y: number; dragged: boolean } | null = null;
+  const trackPointer = (event: PointerEvent) => {
+    if (touchStart && Math.hypot(event.clientX - touchStart.x, event.clientY - touchStart.y) > 8) touchStart.dragged = true;
+    if (!event.isPrimary || inspecting || document.hidden || document.querySelector('dialog[open]')) { game.clearPointer(); return; }
+    const rect = renderer.app.canvas.getBoundingClientRect();
+    const point = { x: (event.clientX - rect.left) / rect.width * WIDTH, y: (event.clientY - rect.top) / rect.height * HEIGHT };
+    if (point.x < 0 || point.x > WIDTH || point.y < BOUNDS.top || point.y > BOUNDS.bottom) { game.clearPointer(); return; }
+    game.movePointer(safePosition(point, sim.activeRocks(), 22));
+  };
+  for (const type of ['pointerenter', 'pointermove'] as const) renderer.app.canvas.addEventListener(type, trackPointer);
+  for (const type of ['pointerleave', 'pointercancel'] as const) renderer.app.canvas.addEventListener(type, () => { touchStart = null; game.clearPointer(); });
+  const interactPointer = (event: PointerEvent) => {
     if (event.button !== 0 || !event.isPrimary) return;
     const rect = renderer.app.canvas.getBoundingClientRect();
     const point = { x: (event.clientX - rect.left) / rect.width * WIDTH, y: (event.clientY - rect.top) / rect.height * HEIGHT };
@@ -197,6 +215,15 @@ async function start() {
     else if (action === 'feed') { renderer.effect(point, action); void sound.feed(); game.callFriends(point); ui.toast('餌がゆっくり沈んでいきます'); }
     play.refresh();
     ui.inspector(game.phrase ? undefined : sim.fish.find(f => f.id === sim.selected), workerMs);
+  };
+  renderer.app.canvas.addEventListener('pointerdown', event => {
+    if (event.isPrimary && event.pointerType !== 'mouse' && game.state.followPointer && !game.phrase && !inspecting) {
+      touchStart = { x: event.clientX, y: event.clientY, dragged: false }; trackPointer(event);
+    } else interactPointer(event);
+  });
+  renderer.app.canvas.addEventListener('pointerup', event => {
+    if (touchStart && event.isPrimary) { if (!touchStart.dragged) interactPointer(event); touchStart = null; }
+    if (event.pointerType !== 'mouse') game.clearPointer();
   });
   renderer.app.canvas.addEventListener('keydown', event => {
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {

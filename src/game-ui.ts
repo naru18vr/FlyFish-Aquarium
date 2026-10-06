@@ -7,6 +7,7 @@ export class GameUI {
   onDemo = (_ids: number[]) => {};
   onFeed = () => {};
   onPet = () => {};
+  onFollow = () => {};
   onCall = (_id: number) => {};
   onClose = () => {};
   onMusicStart = () => {};
@@ -18,13 +19,13 @@ export class GameUI {
     document.querySelector('.observation-note')!.insertAdjacentHTML('afterend', `<div class="game-shelf"><div><span class="eyebrow">LITTLE DISCOVERIES</span><h2>眺めるほど、仲良くなる。</h2><p id="play-summary">魚との出会いを、遊びノートに。</p></div><button id="journal-open" aria-haspopup="dialog">図鑑と模様替え ${icon('chevron', 15)}</button></div>`);
     document.body.insertAdjacentHTML('beforeend', `<dialog id="play-notebook" aria-labelledby="play-title"><div class="play-header"><div><span class="eyebrow">YOUR AQUARIUM NOTEBOOK</span><h2 id="play-title">何してあそぶ？</h2></div><button id="play-close" class="icon-button" aria-label="遊びノートを閉じる">${icon('close')}</button></div><div class="play-wallet">貝殻 <strong id="notebook-shells">8</strong><span>発見や初めての演奏でもらえるよ。</span></div><nav class="play-tabs" aria-label="遊びノートのページ">${[['home', '遊びを選ぶ'], ['friends', 'なかよし'], ['music', '音あそび'], ['journal', '図鑑'], ['decor', '模様替え'], ['visitors', '訪問者']].map(([id, name]) => `<button data-play-tab="${id}" aria-pressed="${id === 'friends'}">${name}</button>`).join('')}</nav>
       <section data-play-panel="home"><h3>好きな遊びから、はじめよう。</h3><p>魚にふれる、音を鳴らす、眺める。気分に合わせて選べます。</p><div class="play-menu">${[
-        ['friends', '♡', '魚となかよし', 'なでる・名前を付ける・呼び寄せる'],
+        ['friends', '♡', '魚となかよし', 'なでる・マウスを追いかける・名前を付ける'],
         ['music', '♪', '音あそび', '光る魚をつついて、お手本を演奏'],
         ['journal', '▤', '図鑑を集める', '泳ぎ方を観察すると自動で記録'],
         ['decor', '✦', '水槽を飾る', '貝殻で背景や飾りを手に入れる'],
         ['visitors', '☀', 'お客さまに会う', 'ときどき訪れるカニや宝箱をお迎え']
       ].map(([id, symbol, title, hint]) => `<button data-play-route="${id}"><span aria-hidden="true">${symbol}</span><strong>${title}</strong><small>${hint}</small><b aria-hidden="true">→</b></button>`).join('')}</div><div class="play-help"><strong>はじめてなら「魚となかよし」がおすすめ</strong><p>「水槽でなでる」を押す → 魚をタップ。空いている場所のタップは餌やりです。</p></div><p class="play-footnote">遊んだ記録は自動保存。いつでも閉じて、水槽を眺められます。</p></section>
-      <section data-play-panel="friends" hidden><h3>ひと泳ぎずつ、顔なじみに。</h3><p>なでるモードで魚をつつくと、びっくりさせずに仲良くなれます。餌を食べた魚も少しずつ慣れてきます。</p><label class="play-check"><input id="gentle-mode" type="checkbox"> 魚を驚かせずになでる</label><button id="friend-pet" class="play-primary">水槽でなでる →</button><div class="friend-picker"><label for="friend-fish">名前を付ける魚</label><select id="friend-fish"></select></div><div class="friend-card"><strong id="friend-caption"></strong><span id="friend-level"></span><progress id="friend-bond" max="100" value="0" aria-label="仲良し度"></progress><p id="friend-progress"></p><form id="friend-name-form"><label for="friend-name">お名前（16文字まで）</label><div><input id="friend-name" maxlength="16" autocomplete="off" placeholder="好きな名前を付けてね"><button type="submit">保存</button></div><small id="friend-name-status" role="status"></small></form><div class="friend-actions"><button id="friend-feed">餌をひとつまみ</button><button id="friend-call">この魚を呼ぶ</button><button id="friend-watch">この魚を見る</button></div><p id="friend-call-hint" class="action-hint"></p></div><details class="play-details"><summary>仲良し度のしくみ</summary><p class="play-footnote">なでる仲良し度は2秒に1回。8で顔なじみ、24でなかよし、60でだいすき。呼ぶと仲良しの魚が10秒ほど寄ってきます。餌や敵にも気を配るので、毎回同じ動きにはなりません。</p></details></section>
+      <section data-play-panel="friends" hidden><h3>ひと泳ぎずつ、顔なじみに。</h3><p>なでるモードで魚をつつくと、びっくりさせずに仲良くなれます。餌を食べた魚も少しずつ慣れてきます。</p><label class="play-check"><input id="gentle-mode" type="checkbox"> 魚を驚かせずになでる</label><button id="friend-pet" class="play-primary">水槽でなでる →</button><div class="follow-controls"><label class="play-check"><input id="follow-pointer" type="checkbox"> マウスを追いかける</label><p>近くの魚がマウスに寄ってきます。仲良しの魚は遠くからも。スマホでは水槽を指でなぞってみてね。</p><button id="friend-follow" class="play-primary">一緒に泳ぐ →</button></div><div class="friend-picker"><label for="friend-fish">名前を付ける魚</label><select id="friend-fish"></select></div><div class="friend-card"><strong id="friend-caption"></strong><span id="friend-level"></span><progress id="friend-bond" max="100" value="0" aria-label="仲良し度"></progress><p id="friend-progress"></p><form id="friend-name-form"><label for="friend-name">お名前（16文字まで）</label><div><input id="friend-name" maxlength="16" autocomplete="off" placeholder="好きな名前を付けてね"><button type="submit">保存</button></div><small id="friend-name-status" role="status"></small></form><div class="friend-actions"><button id="friend-feed">餌をひとつまみ</button><button id="friend-call">この魚を呼ぶ</button><button id="friend-watch">この魚を見る</button></div><p id="friend-call-hint" class="action-hint"></p></div><details class="play-details"><summary>仲良し度のしくみ</summary><p class="play-footnote">なでる仲良し度は2秒に1回。8で顔なじみ、24でなかよし、60でだいすき。呼ぶと仲良しの魚が10秒ほど寄ってきます。餌や敵にも気を配るので、毎回同じ動きにはなりません。</p></details></section>
       <section data-play-panel="music" hidden><h3>お魚たちと、小さな演奏会。</h3><p>お手本の順に魚をつつこう。同じ音の魚なら、どの子でもOK。時間制限はありません。まちがえても、最初から何度でも。</p><div id="phrase-list" class="play-card-list">${PHRASES.map((p, i) => `<article><div><h4>${p.name}</h4><p>${p.notes.map(n => NOTE_NAMES[n]).join(' · ')} <span id="song-done-${i}"></span></p></div><button data-start-phrase="${i}">お手本を聴いて遊ぶ ♪</button></article>`).join('')}</div><p class="play-footnote">次の魚は光る輪が目印です。数字は選んだBGMの音階。↑は高い音です。「遊ぶ」で音がオンになり、水槽に戻ります。完成すると魚たちがくるり。初めての完成で貝殻＋5。</p></section>
       <section data-play-panel="journal" hidden><h3>泳ぎ方の発見を、ひとつずつ。</h3><p>魚の種類や泳ぎ方を見つけると、自動で記録されます。まだの項目には見つけ方のヒントがあります。</p><p id="journal-count"></p><div id="journal-list" class="journal-grid"></div><p class="play-footnote">新しい発見は貝殻＋4。水槽をリセットしても、このノートは残ります。</p></section>
       <section data-play-panel="decor" hidden><h3>貝殻で、わたしの水槽。</h3><p>背景・海藻・岩の色と、ドット絵の飾りを選べます。一度手に入れたものは何度でも使えます。</p><p class="play-help">貝殻は新しい発見で＋4、音あそびの初めての完成で＋5。交換するとすぐ水槽に反映されます。</p><button id="decor-preview" class="play-primary">飾った水槽を見る →</button><button id="decor-base" class="play-base">いつもの水槽に戻す</button><div id="decor-list" class="play-card-list"></div><p class="play-footnote">飾りは泳ぎを邪魔しません。位置は左・中央・右から選べます。</p></section>
@@ -49,6 +50,8 @@ export class GameUI {
       }
     });
     document.querySelector<HTMLButtonElement>('#friend-pet')!.onclick = () => { if (!this.game.state.gentle) this.game.toggleGentle(); this.onPet(); this.refresh(true); this.dialog.close(); };
+    document.querySelector<HTMLInputElement>('#follow-pointer')!.onchange = () => { this.game.toggleFollow(); this.refresh(true); };
+    document.querySelector<HTMLButtonElement>('#friend-follow')!.onclick = () => { if (!this.game.state.followPointer) this.game.toggleFollow(); this.onFollow(); this.refresh(true); this.dialog.close(); };
     document.querySelector<HTMLButtonElement>('#decor-preview')!.onclick = () => this.dialog.close();
     document.querySelector<HTMLInputElement>('#gentle-mode')!.onchange = () => { this.game.toggleGentle(); this.refresh(true); };
     document.querySelector<HTMLSelectElement>('#friend-fish')!.onchange = event => { this.picked = +(event.target as HTMLSelectElement).value; this.updateFriend(); };
@@ -104,6 +107,7 @@ export class GameUI {
     document.querySelectorAll<HTMLButtonElement>('[data-play-tab]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.playTab === this.tab)));
     document.querySelectorAll<HTMLElement>('[data-play-panel]').forEach(p => p.hidden = p.dataset.playPanel !== this.tab);
     document.querySelector<HTMLInputElement>('#gentle-mode')!.checked = state.gentle;
+    document.querySelector<HTMLInputElement>('#follow-pointer')!.checked = state.followPointer;
     this.updateFriend();
     for (const i of [0, 1, 2]) document.querySelector(`#song-done-${i}`)!.textContent = state.songs.includes(i) ? '✓ 演奏できた' : '';
     document.querySelector('#journal-count')!.textContent = `${state.found.length} / ${JOURNAL.length} の発見`;

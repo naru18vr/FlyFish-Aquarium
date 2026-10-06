@@ -6,6 +6,45 @@ import type { AquariumGame } from '../../src/game';
 declare global { interface Window { __aquarium: { sim: Aquarium; game: AquariumGame; demonstrating: boolean; audio: AudioSnapshot; width: number; height: number; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
 const pageErrors = new WeakMap<Page, string[]>();
 
+test('cursor attracts nearby fish, leaves frightened fish alone and clears after leaving the tank', async ({ page }, testInfo) => {
+  await page.locator('#pause').click(); await page.locator('#play-open').click();
+  await page.locator('[data-play-route="friends"]').click(); await page.locator('#friend-follow').click();
+  await page.evaluate(() => {
+    const a = window.__aquarium; a.sim.settings.flyWeight = 0; a.sim.settings.predators = 0; a.sim.settings.stations = 0; a.sim.settings.fishCount = 1; a.sim.applySettings(); a.sim.food = [];
+    const f = a.sim.fish[0]; f.x = 240; f.y = 180; f.angle = Math.PI; f.fear = 0; f.startleLeft = f.startleRight = 0;
+  });
+  const point = await page.locator('#tank canvas').evaluate((canvas: HTMLCanvasElement) => {
+    const r = canvas.getBoundingClientRect(), a = window.__aquarium;
+    return { x: r.left + 400 / a.width * r.width, y: r.top + 180 / a.height * r.height };
+  });
+  await page.mouse.move(point.x, point.y);
+  await expect.poll(() => page.evaluate(() => window.__aquarium.game.pointer?.x)).toBeCloseTo(400, 0);
+  const result = await page.evaluate(() => {
+    const a = window.__aquarium, f = a.sim.fish[0], before = Math.hypot(f.x - 400, f.y - 180);
+    for (let i = 0; i < 240; i++) a.sim.update(1 / 60);
+    return { before, after: Math.hypot(f.x - 400, f.y - 180), target: a.game.followTarget(f) };
+  });
+  expect(result.after).toBeLessThan(result.before - 10); expect(result.target).not.toBeNull();
+  await page.screenshot({ path: testInfo.outputPath('cursor-follow.png') });
+  await page.evaluate(() => { const a = window.__aquarium; a.sim.interact(a.sim.fish[0]); });
+  expect(await page.evaluate(() => window.__aquarium.game.followTarget(window.__aquarium.sim.fish[0]))).toBeNull();
+  await page.mouse.move(0, 0); await expect.poll(() => page.evaluate(() => window.__aquarium.game.pointer)).toBeNull();
+  const foods = await page.evaluate(() => window.__aquarium.sim.food.length);
+  const touch = { pointerType: 'touch', pointerId: 2, isPrimary: true, button: 0, buttons: 1, clientX: point.x, clientY: point.y };
+  await page.locator('#tank canvas').dispatchEvent('pointerdown', touch);
+  await page.locator('#tank canvas').dispatchEvent('pointermove', { ...touch, clientX: point.x + 15 });
+  expect(await page.evaluate(() => window.__aquarium.game.pointer)).not.toBeNull();
+  await page.locator('#tank canvas').dispatchEvent('pointerup', { ...touch, buttons: 0, clientX: point.x + 15 });
+  expect(await page.evaluate(() => window.__aquarium.game.pointer)).toBeNull();
+  expect(await page.evaluate(() => window.__aquarium.sim.food.length)).toBe(foods);
+  await page.reload(); await page.waitForFunction(() => !!window.__aquarium?.game);
+  expect(await page.evaluate(() => window.__aquarium.game.state.followPointer)).toBe(true);
+  expect(await page.evaluate(() => window.__aquarium.game.pointer)).toBeNull();
+  await page.locator('#play-open').click(); await page.locator('[data-play-route="friends"]').click();
+  await page.locator('#follow-pointer').uncheck();
+  expect(await page.evaluate(() => window.__aquarium.game.state.followPointer)).toBe(false);
+});
+
 test('play menu explains choices and starts gentle petting from a labelled action', async ({ page }, testInfo) => {
   await page.locator('#play-open').click();
   await expect(page.locator('[data-play-panel="home"]')).toBeVisible();

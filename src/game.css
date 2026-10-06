@@ -22,3 +22,5 @@
 .friend-picker select,#friend-name{font-size:14px;min-height:44px}.friend-card button,.play-card-list button,.play-base{font-size:13px;min-height:44px}
 #play-notebook .play-card-list p,#play-notebook .journal-entry p{font-size:12px}.play-card-list h4,.journal-entry h4{font-size:14px;font-weight:600}.play-card-list small,.journal-entry small{color:#637455}
 @media(max-width:520px){.play-open{font-size:12px;gap:5px}.tank-view .play-open{font-size:12px}.play-open span{font-size:10px}.play-menu{grid-template-columns:1fr;gap:9px;margin:14px 0}.play-menu button{min-height:83px;padding-top:14px;padding-bottom:14px}.play-tabs button{font-size:12px;padding:8px 4px}.play-card-list article{flex-wrap:wrap}.play-card-list article>div{flex-basis:calc(100% - 40px)}.play-card-list button{margin-left:auto}.play-header h2{font-size:23px}}
+
+.follow-controls{padding:12px 16px;margin:8px 0 18px;border:1px solid #d5e1c8;border-radius:9px;background:#eef4e4}.follow-controls input{width:16px;height:16px}.follow-controls .play-primary{margin-bottom:0}

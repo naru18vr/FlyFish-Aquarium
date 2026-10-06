@@ -24,7 +24,7 @@ test('published notebook discovers fish and exchanges shells for a lasting decor
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('./?tank&debug'); await page.waitForFunction(() => window.__aquarium?.game.state.found.length >= 5);
   await page.locator('#play-open').click(); await expect(page.locator('#play-notebook')).toBeVisible();
-  await page.locator('[data-play-route="friends"]').click(); await page.locator('#friend-name').fill('ぽろん'); await page.locator('#friend-name-form button').click();
+  await page.locator('[data-play-route="friends"]').click(); await page.locator('#follow-pointer').check(); await page.locator('#friend-name').fill('ぽろん'); await page.locator('#friend-name-form button').click();
   await page.locator('[data-play-tab="journal"]').click(); expect(await page.locator('.journal-entry.found').count()).toBeGreaterThanOrEqual(5);
   await page.screenshot({ path: testInfo.outputPath('published-game-notebook.png') });
   await page.locator('[data-play-tab="decor"]').click(); await page.locator('[data-buy="shell"]').click();
@@ -32,6 +32,7 @@ test('published notebook discovers fish and exchanges shells for a lasting decor
   await page.locator('#play-close').click(); await page.screenshot({ path: testInfo.outputPath('published-game-tank.png') });
   await page.reload(); await page.waitForFunction(() => !!window.__aquarium?.game);
   expect(await page.evaluate(() => window.__aquarium.game.friend(1).name)).toBe('ぽろん');
+  expect(await page.evaluate(() => window.__aquarium.game.state.followPointer)).toBe(true);
   expect(await page.evaluate(() => window.__aquarium.game.state.owned)).toContain('shell'); expect(errors).toEqual([]);
 });
 

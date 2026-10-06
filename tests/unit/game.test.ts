@@ -16,6 +16,27 @@ describe('aquarium notebook', () => {
     expect(s.songs).toEqual([0]); expect(s.friends[1]).toEqual({ name: '1234567890123456', bond: 100, rewarded: 3 }); expect(s.visits).toEqual({ crab: 0, chest: 0, glow: 0 });
     expect(readGameState(null).shells).toBe(8); expect(readGameState({ version: 99, shells: 10000 }).shells).toBe(8);
   });
+  it('routes curious fish to the cursor but releases frightened fish and prioritizes a friend call', () => {
+    const g = new AquariumGame(), sim = new Aquarium({ ...DEFAULTS, predators: 0 });
+    const f = sim.fish[0]; f.x = 200; f.y = 180; f.fear = 0; f.startleLeft = f.startleRight = 0;
+    g.movePointer({ x: 300, y: 180 }); expect(g.pointer).toBeNull(); g.toggleFollow(); g.movePointer({ x: 300, y: 180 });
+    expect(g.followTarget(f)).toEqual({ x: 300, y: 180 });
+    f.startleLeft = 1; expect(g.followTarget(f)).toBeNull(); f.startleLeft = 0;
+    f.fear = .5; expect(g.followTarget(f)).toBeNull(); f.fear = 0;
+    g.movePointer({ x: 700, y: 180 }); expect(g.followTarget(f)).toBeNull();
+    g.state.friends[f.id] = { name: '', bond: 8, rewarded: 1 }; expect(g.followTarget(f)).not.toBeNull();
+    g.callFriends({ x: 250, y: 200 }); expect(g.followTarget(f)).toBe(g.call);
+    g.startPhrase(0); expect(g.followTarget(f)).toBeNull(); g.stopPhrase(); g.call = null;
+    g.clearPointer(); expect(g.followTarget(f)).toBeNull();
+  });
+  it('saves follow preference without keeping a stale or invalid cursor position', () => {
+    const g = new AquariumGame(); g.toggleFollow(); g.movePointer({ x: 300, y: 180 });
+    g.movePointer({ x: NaN, y: 30 }); expect(g.pointer).toEqual({ x: 300, y: 180 });
+    const loaded = new AquariumGame(JSON.parse(JSON.stringify(g.state)));
+    expect(loaded.state.followPointer).toBe(true); expect(loaded.pointer).toBeNull();
+    expect(readGameState({ version: 1, followPointer: 'true' }).followPointer).toBe(false);
+    g.toggleFollow(); expect(g.pointer).toBeNull(); expect(g.state.followPointer).toBe(false);
+  });
   it('awards each discovery once and never accepts an unknown discovery', () => {
     const g = new AquariumGame();
     expect(g.discover('meal')).toBe(true); expect(g.discover('meal')).toBe(false); expect(g.discover('bogus')).toBe(false);

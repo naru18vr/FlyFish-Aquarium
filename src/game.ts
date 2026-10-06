@@ -41,7 +41,7 @@ export const degreeOf = (id: number) => ((id - 1) % 10 + 10) % 10;
 export const friendshipLabel = (value: number) => value >= 60 ? 'だいすき' : value >= 24 ? 'なかよし' : value >= 8 ? '顔なじみ' : 'はじめまして';
 export interface FishFriend { name: string; bond: number; rewarded: number }
 export interface GameState {
-  version: 1; shells: number; gentle: boolean; friends: Record<string, FishFriend>;
+  version: 1; shells: number; gentle: boolean; followPointer: boolean; friends: Record<string, FishFriend>;
   found: string[]; owned: ShopId[]; theme: 'sea' | 'sunset' | 'night'; plant: 'green' | 'pink'; rock: 'moss' | 'lavender';
   props: Partial<Record<'shell' | 'arch' | 'star', { on: boolean; position: number }>>;
   visits: Record<VisitorKind, number>; songs: number[];
@@ -50,9 +50,9 @@ function integer(value: unknown, fallback: number, max: number) { return typeof 
 const object = (v: unknown): Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
 export function readGameState(raw: unknown): GameState {
   const s = object(raw);
-  const state: GameState = { version: 1, shells: 8, gentle: false, friends: {}, found: [], owned: [], theme: 'sea', plant: 'green', rock: 'moss', props: {}, visits: { crab: 0, chest: 0, glow: 0 }, songs: [] };
+  const state: GameState = { version: 1, shells: 8, gentle: false, followPointer: false, friends: {}, found: [], owned: [], theme: 'sea', plant: 'green', rock: 'moss', props: {}, visits: { crab: 0, chest: 0, glow: 0 }, songs: [] };
   if (s.version !== 1) return state;
-  state.shells = integer(s.shells, 8, 99999); state.gentle = s.gentle === true;
+  state.shells = integer(s.shells, 8, 99999); state.gentle = s.gentle === true; state.followPointer = s.followPointer === true;
   for (const [id, rawFriend] of Object.entries(object(s.friends)).slice(0, 512)) {
     if (!/^[1-9][0-9]{0,8}$/.test(id)) continue;
     const f = object(rawFriend), bond = integer(f.bond, 0, 100);
@@ -78,6 +78,7 @@ export class AquariumGame {
   danceSerial = 0;
   visitor: { kind: VisitorKind; born: number } | null = null;
   call: (Point & { until: number }) | null = null;
+  pointer: Point | null = null;
   onChange = () => {};
   onNotice = (_message: string) => {};
   private lastPet = new Map<number, number>(); private lastMeal = new Map<number, number>();
@@ -94,6 +95,18 @@ export class AquariumGame {
   private trimFriends() {
     const ids = Object.keys(this.state.friends);
     if (ids.length > 512) for (const id of ids.slice(0, ids.length - 512)) delete this.state.friends[id];
+  }
+  toggleFollow() { this.state.followPointer = !this.state.followPointer; this.clearPointer(); this.changed(); }
+  movePointer(point: Point) {
+    if (this.state.followPointer && Number.isFinite(point.x) && Number.isFinite(point.y)) this.pointer = { ...point };
+  }
+  clearPointer() { this.pointer = null; }
+  followTarget(fish: Fish): Point | null {
+    if (this.phrase || fish.fear >= .3 || Math.max(fish.startleLeft, fish.startleRight) > .2) return null;
+    const friendly = this.friend(fish.id).bond >= 8;
+    if (this.call && friendly) return this.call;
+    const point = this.state.followPointer ? this.pointer : null;
+    return point && distance(fish, point) <= (friendly ? 600 : 320) ? point : null;
   }
   toggleGentle() { this.state.gentle = !this.state.gentle; this.changed(); }
   private bond(id: number, amount: number) {

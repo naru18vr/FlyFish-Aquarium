@@ -215,6 +215,11 @@ export class AquariumRenderer {
       }
     }
     if (this.game?.call) this.selection.circle(this.game.call.x, this.game.call.y, 20).stroke({ color: '#f1c1bc', width: 2, alpha: .55 });
+    if (this.game?.state.followPointer && this.game.pointer && !phrase) {
+      const p = this.game.pointer;
+      this.selection.circle(p.x, p.y, 12).stroke({ color: '#d5e9b7', width: 1.5, alpha: .65 });
+      this.selection.circle(p.x, p.y, 3).fill({ color: '#d5e9b7', alpha: .8 });
+    }
     this.ripples.clear();
     for (const ripple of this.ripple) {
       ripple.age += ripple.kind === 'note' || ripple.kind === 'heart' ? effectDt : dt;
