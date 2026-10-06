@@ -714,6 +714,7 @@ test('idle dashboard explains waiting and collects ready rewards once', async ({
   await page.evaluate(()=>{const s=window.__aquarium.idle.state;s.shells=4;s.growth=1200;s.world.crab.pending=3;window.__aquarium.idle.revision++;});
   await expect(page.locator('#idle-reward-total')).toHaveText('貝殻 13 個'); await expect(page.locator('#idle-open')).toContainText('貝殻13個');
   const wallet=await page.evaluate(()=>window.__aquarium.game.state.shells);
+  await expect(page.locator('[data-play-tab="idle"]')).toBeInViewport();
   await expect(page.locator('#idle-claim-all')).toBeInViewport();
   await page.screenshot({path:testInfo.outputPath('idle-overview.png'),fullPage:true});
   await page.locator('#idle-claim-all').click(); await expect(page.locator('#idle-claim-all')).toBeDisabled();

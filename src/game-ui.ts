@@ -79,6 +79,8 @@ export class GameUI {
   open(tab: string) {
     this.tab = tab; this.dialog.scrollTop = 0; if (this.sim.selected !== null) this.picked = this.sim.selected;
     document.querySelector<HTMLElement>('#ux-feedback')!.hidden=true; this.message(''); this.refresh(true); if (!this.dialog.open) this.dialog.showModal();
+    const tabs = this.dialog.querySelector<HTMLElement>('.play-tabs')!, active = tabs.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (active) tabs.scrollLeft = active.offsetLeft - tabs.offsetLeft;
   }
   private phraseIds() { return this.game.phrase ? PHRASES[this.game.phrase.index].notes.map(n => this.sim.fish.find(f => !this.sim.isAway(f) && degreeOf(f.id) === n)?.id ?? n + 1) : []; }
   updateHud() {

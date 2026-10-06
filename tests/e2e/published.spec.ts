@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { GAME_KEY, JOURNAL } from '../../src/game';
+import { JOURNAL } from '../../src/game';
 
 declare global { interface Window { __audioCapture: { context: AudioContext; stream: MediaStream; recorder?: MediaRecorder; chunks: Blob[] } } }
 
