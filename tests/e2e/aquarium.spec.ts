@@ -2,8 +2,98 @@ import { expect, test, type Page } from '@playwright/test';
 import type { AudioSnapshot } from '../../src/audio';
 import type { Aquarium } from '../../src/simulation';
 import { FISH_PROFILES, FISH_SPECIES, PREDATOR_KINDS } from '../../src/species';
-declare global { interface Window { __aquarium: { sim: Aquarium; audio: AudioSnapshot; width: number; height: number; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
+import type { AquariumGame } from '../../src/game';
+declare global { interface Window { __aquarium: { sim: Aquarium; game: AquariumGame; demonstrating: boolean; audio: AudioSnapshot; width: number; height: number; ready: boolean; workerMs: number; paused: boolean; brainFailed: boolean } } }
 const pageErrors = new WeakMap<Page, string[]>();
+
+test('notebook names and gentle friendship persist, and friends can be called', async ({ page }, testInfo) => {
+  await page.locator('#pause').click();
+  await page.evaluate(() => { const g = window.__aquarium.game; g.state.friends[1] = { name: '', bond: 8, rewarded: 1 }; g.name(1, ''); });
+  await page.locator('#play-open').click(); await page.locator('#gentle-mode').check();
+  await page.locator('#friend-fish').selectOption('1'); await page.locator('#friend-name').fill('ぽろん');
+  await page.locator('#friend-name-form button').click(); await expect(page.locator('#friend-caption')).toContainText('ぽろん');
+  await page.locator('#play-close').click(); await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('Enter');
+  expect(await page.evaluate(() => window.__aquarium.game.friend(1).bond)).toBe(10);
+  expect(await page.evaluate(() => Math.max(window.__aquarium.sim.fish[0].startleLeft, window.__aquarium.sim.fish[0].startleRight))).toBeLessThan(.1);
+  await page.locator('#play-open').click(); await page.locator('#friend-call').click();
+  expect(await page.evaluate(() => window.__aquarium.game.call)).not.toBeNull();
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  await page.locator('#play-open').click(); await expect(page.locator('#friend-caption')).toContainText('ぽろん'); await expect(page.locator('#gentle-mode')).toBeChecked();
+  expect(await page.evaluate(() => window.__aquarium.game.friend(1).bond)).toBeGreaterThanOrEqual(10);
+  await page.screenshot({ path: testInfo.outputPath('game-friendship.png') });
+});
+
+test('a musical phrase demos, guides notes and rewards a complete keyboard performance', async ({ page }, testInfo) => {
+  await page.locator('#pause').click(); await page.locator('#play-open').click(); await page.locator('[data-play-tab="music"]').click();
+  await page.locator('[data-start-phrase="0"]').click(); await expect(page.locator('body')).toHaveClass('tank-view');
+  await expect(page.locator('#music-hud')).toBeVisible(); await expect.poll(() => page.evaluate(() => window.__aquarium.demonstrating)).toBe(false);
+  expect(await page.evaluate(() => window.__aquarium.audio.effectsPlayed)).toBe(3);
+  await page.locator('#tank canvas').focus(); await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('Enter');
+  await expect(page.locator('#music-instruction')).toContainText('(1/3)');
+  await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('Enter');
+  await page.screenshot({ path: testInfo.outputPath('game-melody.png') });
+  await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('ArrowRight'); await page.locator('#tank canvas').press('Enter');
+  await expect(page.locator('#music-hud')).toBeHidden(); expect(await page.evaluate(() => window.__aquarium.game.state.songs)).toEqual([0]);
+  expect(await page.evaluate(() => window.__aquarium.game.state.found)).toContain('song');
+  const before = await page.evaluate(() => window.__aquarium.game.state.shells);
+  await page.locator('#play-open').click(); await page.locator('[data-play-tab="music"]').click(); await expect(page.locator('#song-done-0')).toContainText('演奏できた');
+  await page.locator('[data-start-phrase="0"]').click(); await expect.poll(() => page.evaluate(() => window.__aquarium.demonstrating)).toBe(false);
+  await page.evaluate(() => { const g = window.__aquarium.game; for (const id of [1, 3, 5]) g.note(id); });
+  expect(await page.evaluate(() => window.__aquarium.game.state.shells)).toBe(before);
+});
+
+test('shell purchases alter the tank, positions and ownership survive reset and reload', async ({ page }, testInfo) => {
+  await page.locator('#pause').click(); await page.evaluate(() => { const g = window.__aquarium.game; g.state.shells = 100; g.name(1, ''); });
+  await page.locator('#play-open').click(); await page.locator('[data-play-tab="decor"]').click();
+  for (const id of ['night', 'pink', 'lavender', 'shell', 'arch', 'star']) await page.locator(`[data-buy="${id}"]`).click();
+  await page.locator('select[data-prop="shell"]').selectOption('2'); await page.locator('input[data-prop="arch"]').uncheck();
+  expect(await page.evaluate(() => window.__aquarium.game.state.theme)).toBe('night');
+  expect(await page.evaluate(() => window.__aquarium.game.state.props.shell?.position)).toBe(2);
+  await page.locator('#play-close').click(); await page.locator('#tank-open').click();
+  await page.screenshot({ path: testInfo.outputPath('game-decorated-tank.png') });
+  await page.locator('#tank-exit').click(); await page.locator('#reset').click();
+  expect(await page.evaluate(() => window.__aquarium.game.state.owned.length)).toBe(6);
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  expect(await page.evaluate(() => [window.__aquarium.game.state.theme, window.__aquarium.game.state.plant, window.__aquarium.game.state.rock])).toEqual(['night', 'pink', 'lavender']);
+  await page.locator('#play-open').click(); await page.locator('[data-play-tab="decor"]').click(); await page.locator('#decor-base').click();
+  expect(await page.evaluate(() => window.__aquarium.game.state.theme)).toBe('sea'); expect(await page.evaluate(() => window.__aquarium.game.state.owned.length)).toBe(6);
+});
+
+test('observed behavior enters the journal and visiting creatures can be greeted', async ({ page }, testInfo) => {
+  await page.locator('#pause').click();
+  await page.evaluate(() => {
+    const { game, sim } = window.__aquarium;
+    const fish = sim.fish.slice(0, 3); fish.forEach((f, i) => { f.x = 220 + i * 20; f.y = 170; f.angle = .1; f.speed = 30; f.fear = 0; });
+    for (let i = 0; i < 6; i++) game.update(.5, fish, [{ x: 240, y: 170 }], 12);
+    for (let i = 0; i < 42; i++) game.update(1, [], [], 12);
+  });
+  await expect(page.locator('#visitor-catch')).toContainText('おさんぽカニ');
+  await page.locator('#visitor-catch').click(); expect(await page.evaluate(() => window.__aquarium.game.state.visits.crab)).toBe(1);
+  await page.locator('#play-open').click(); await page.locator('[data-play-tab="journal"]').click();
+  await expect(page.locator('[data-discovery="school"]')).toHaveClass(/found/); await expect(page.locator('[data-discovery="station"]')).toHaveClass(/found/);
+  await page.screenshot({ path: testInfo.outputPath('game-journal.png') });
+  await page.locator('#play-close').click();
+  await page.evaluate(() => { const { game } = window.__aquarium; for (let i = 0; i < 150; i++) game.update(1, [], [], 20); });
+  await expect(page.locator('#visitor-catch')).toContainText('夜のほたる魚');
+  const point = await page.evaluate(() => window.__aquarium.game.visitorPoint(window.__aquarium.width, window.__aquarium.height)!);
+  const box = (await page.locator('#tank canvas').boundingBox())!;
+  const dimensions = await page.evaluate(() => [window.__aquarium.width, window.__aquarium.height]);
+  await page.mouse.click(box.x + point.x / dimensions[0] * box.width, box.y + point.y / dimensions[1] * box.height);
+  expect(await page.evaluate(() => window.__aquarium.game.state.visits.glow)).toBe(1); await expect(page.locator('#visitor-catch')).toBeHidden();
+});
+
+test('notebook handles corrupt storage and fits a narrow screen without leaving tank mode on dialog Escape', async ({ page }) => {
+  await page.evaluate(() => localStorage.setItem('flyfish-play-v1', '{broken'));
+  await page.reload(); await page.waitForFunction(() => window.__aquarium?.ready);
+  expect(await page.evaluate(() => window.__aquarium.game.state.owned)).toEqual([]);
+  await page.setViewportSize({ width: 320, height: 640 }); await page.locator('#tank-open').click(); await page.locator('#play-open').click();
+  for (const tab of ['friends', 'music', 'journal', 'decor', 'visitors']) {
+    await page.locator(`[data-play-tab="${tab}"]`).click();
+    expect(await page.locator('#play-notebook').evaluate(e => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
+  }
+  await page.keyboard.press('Escape'); await expect(page.locator('#play-notebook')).not.toBeVisible(); await expect(page.locator('body')).toHaveClass('tank-view');
+  await expect(page.locator('#tank canvas')).toBeFocused(); await page.keyboard.press('Escape'); await expect(page.locator('body')).not.toHaveClass('tank-view');
+});
 
 test.beforeEach(async ({ page }) => {
   const errors: string[] = []; pageErrors.set(page, errors);

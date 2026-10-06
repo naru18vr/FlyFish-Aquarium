@@ -7,10 +7,12 @@ export class Aquarium {
   fish: Fish[] = []; predators: Predator[] = []; food: Food[] = []; stations: Station[] = [];
   readonly rocks: Rock[] = [{ x: 291, y: 600, r: 54 }, { x: 822, y: 597, r: 65 }, { x: 879, y: 628, r: 31 }];
   time = 0; eaten = 0; selected: number | null = null;
-  private rng = random(481516); private fishId = 0; private foodId = 0;
+  private rng = random(481516); private foodId = 0;
   private fishGrid = new SpatialGrid<Fish>(); private foodGrid = new SpatialGrid<Food>(); private predatorGrid = new SpatialGrid<Predator>();
   private aiTime = 0;
   private stationLayout = '';
+  onEat: (fish: Fish) => void = () => {};
+  companion: ((fish: Fish) => Point | null) | null = null;
   constructor(public settings: Settings) { setWorldSize(BASE_WIDTH, BASE_HEIGHT); this.applySettings(); }
   get environmentScale() { return Math.min(1.25, WIDTH / BASE_WIDTH); }
   resize(width: number, height: number) {
@@ -75,7 +77,8 @@ export class Aquarium {
       if (this.activeRocks().every(r => distance(point, r) > r.r + 24) && this.stations.every(s => distance(point, s) > 45) && this.predators.every(p => distance(point, p) > 85)) break;
     }
     const traits = () => this.rng() * 2 - 1;
-    const id = ++this.fishId;
+    // A stable tank slot keeps names and friendship attached across reload/reset.
+    let id = 1; while (this.fish.some(f => f.id === id)) id++;
     return { ...point, id, species: this.settings.fishSpecies === 'mixed' ? FISH_SPECIES[(id - 1) % FISH_SPECIES.length] : this.settings.fishSpecies, angle: this.rng() * Math.PI * 2, speed: 28 + this.rng() * 20, vx: 0, vy: 0,
       energy: .8 + this.rng() * .2, hunger: .3 + this.rng() * .5, fear: 0, color: Math.floor(this.rng() * 5), phase: this.rng() * Math.PI * 2,
       traits: { maxSpeed: traits(), turnSpeed: traits(), curiosity: traits(), fearSensitivity: traits(), foodSensitivity: traits(), brainNoise: traits() },
@@ -145,8 +148,15 @@ export class Aquarium {
       let desired = f.angle + Math.sin(this.time * .5 + f.phase) * .6;
       let accel = .36, brake = s.wallFront * .45;
       f.target = null;
+      const companion = this.companion?.(f);
+      if (companion && !food) {
+        const p = project(companion, 400);
+        s.foodLeft = Math.max(s.foodLeft, p.left * .7); s.foodRight = Math.max(s.foodRight, p.right * .7); s.foodFront = Math.max(s.foodFront, p.front * .7);
+        s.foodDistance = Math.min(s.foodDistance, p.distance);
+        desired = Math.atan2(companion.y - f.y, companion.x - f.x); accel = distance(f, companion) > 50 ? .5 : .16; f.target = companion;
+      }
       if (food && f.hunger > .1) { desired = Math.atan2(food.y - f.y, food.x - f.x); accel = .57; f.target = food; }
-      else if (neighbours.length > 0) {
+      else if (!companion && neighbours.length > 0) {
         const close = neighbours.find(n => distance(f, n) < 38);
         if (close) desired = Math.atan2(f.y - close.y, f.x - close.x);
         else desired += angleDiff(Math.atan2(neighbours.reduce((sum, n) => sum + Math.sin(n.angle), 0), neighbours.reduce((sum, n) => sum + Math.cos(n.angle), 0)), f.angle) * .28;
@@ -201,6 +211,7 @@ export class Aquarium {
       f.eating = Math.max(0, f.eating - dt);
       for (const food of this.foodGrid.near(f, 19)) if (this.food.includes(food) && distance(f, food) < 19) {
         this.food.splice(this.food.indexOf(food), 1); f.hunger = clamp(f.hunger - .18); f.energy = clamp(f.energy + .06); f.eating = .55; this.eaten++;
+        this.onEat(f);
       }
     }
     for (const p of this.predators) {

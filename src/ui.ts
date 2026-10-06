@@ -99,7 +99,7 @@ export class UI {
       if (this.ownsFullscreen && !document.fullscreenElement) { this.ownsFullscreen = false; this.tankMode(false); }
     });
     document.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && this.tankActive) { event.preventDefault(); event.stopPropagation(); this.tankMode(false); }
+      if (event.key === 'Escape' && this.tankActive && !document.querySelector('dialog[open]')) { event.preventDefault(); event.stopPropagation(); this.tankMode(false); }
     }, true);
     const about = document.querySelector<HTMLDialogElement>('#about')!;
     for (const id of ['about-open', 'credits-open']) document.querySelector<HTMLButtonElement>(`#${id}`)!.onclick = () => about.showModal();
