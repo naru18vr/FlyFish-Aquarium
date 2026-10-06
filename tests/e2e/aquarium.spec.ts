@@ -43,6 +43,8 @@ test('grown named fish move between independently decorated tanks, rest at a hot
   await page.locator('#idle-open').click(); await expect(page.locator(`[data-child-name="${id}"] input`)).toHaveValue('ちびぽろん');
   await page.locator(`[data-child-hotel="${id}"]`).click(); await expect(page.locator('#world-hotel-fish')).toContainText('ちびぽろん');
   await page.locator('#world-hotel-return').click(); await expect(page.locator(`[data-child-name="${id}"] input`)).toHaveValue('ちびぽろん');
+  await page.locator('[data-room="0"]').focus(); await page.waitForTimeout(1600);
+  await expect(page.locator('[data-room="0"]')).toBeFocused();
   await page.locator('[data-room="0"]').click(); expect(await page.evaluate(() => window.__aquarium.game.state.props.shell?.on)).not.toBe(true);
   await page.locator('#world-children').scrollIntoViewIfNeeded(); await page.screenshot({ path: testInfo.outputPath('world-grown-fish.png') });
   await page.locator('#world-mail').scrollIntoViewIfNeeded(); await expect(page.locator('#world-mail')).toContainText('お便り'); await page.screenshot({ path: testInfo.outputPath('world-postcards.png') });

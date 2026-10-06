@@ -9,7 +9,7 @@ const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt
 
 export class WorldUI {
   onRoom = (_room: number) => {};
-  private titleKey = ''; private key = ''; private mailKey = ''; private colorKey = ''; private seen = -1;
+  private roomsKey = ''; private titleKey = ''; private key = ''; private mailKey = ''; private colorKey = ''; private seen = -1;
   constructor(private idle: IdleAquarium, private game: AquariumGame, private book: GameUI, private sim: Aquarium) {
     document.querySelector('.idle-diary')!.insertAdjacentHTML('beforebegin', `<div class="world-sections">
       <article><h4>🏝️ わたしの水槽たち</h4><p>Lv.2で夕焼けの浅瀬、Lv.3で星夜の水槽が増えます。最初の水槽には元からのお魚、どの水槽にも育てたお魚を引っ越せます。</p><p class="world-tip">水槽を替えても魚は元の水槽に残ります。新しい水槽は空からスタート。卵から育てた魚を引っ越して住まわせよう。</p><div id="world-rooms" class="world-room-buttons"></div><p id="world-room-summary" role="status"></p><button data-open-young>育てた魚を引っ越す ↓</button><form id="world-room-name"><label for="world-room-title">この水槽の名前</label><input id="world-room-title" maxlength="16"><button>名前を保存</button></form><p>「模様替え」の背景・海藻・飾りは水槽ごとに保存。育てたお魚の「引っ越し」で住む水槽を選べます。</p></article>
@@ -59,7 +59,11 @@ export class WorldUI {
     for (const o of document.querySelector<HTMLSelectElement>('#idle-trip-route')!.options) o.disabled = !this.idle.routeAvailable(+o.value);
     if (!force && (document.querySelector<HTMLElement>('[data-play-panel="idle"]')!.hidden || this.seen === this.idle.revision)) return;
     this.seen = this.idle.revision;
+    const roomsKey = JSON.stringify([s.level, w.room, w.rooms.map(r => r.name), counts]);
+    if (this.roomsKey !== roomsKey) {
+      this.roomsKey = roomsKey;
     document.querySelector('#world-rooms')!.innerHTML = w.rooms.map((r, i) => `<button data-room="${i}" aria-pressed="${i === w.room}" ${i >= s.level ? 'disabled' : ''}>${esc(r.name)} · ${i>=s.level?'準備中':`${counts[i]}匹`} ${i === w.room ? '✓ 表示中' : i >= s.level ? `· Lv.${i + 1}で解放` : 'へ移動'}</button>`).join('');
+    }
     document.querySelector('#world-room-summary')!.textContent=`今は「${w.rooms[w.room].name}」を表示中。お魚${count}匹。${w.room>0&&!count?'育てた魚の住む水槽を変更すると、ここに泳ぎます。':''}`;
     const title = document.querySelector<HTMLInputElement>('#world-room-title')!, titleKey=JSON.stringify([w.room,w.rooms[w.room].name]); if(this.titleKey!==titleKey){this.titleKey=titleKey;title.value=w.rooms[w.room].name;}
     const rate = w.crab.bond >= 15 ? 6 : w.crab.bond >= 5 ? 4 : 2;
