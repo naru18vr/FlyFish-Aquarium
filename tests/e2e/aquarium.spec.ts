@@ -342,12 +342,12 @@ for (const [track, root] of [['sunshine', 72], ['bubbles', 77], ['arcade', 74]] 
   });
 }
 
-test('three fish timbres work while paused and effects can be muted', async ({ page }, testInfo) => {
+test('eight fish timbres work while paused and effects can be muted', async ({ page }, testInfo) => {
   await page.locator('#pause').click();
   await page.locator('#sound-toggle').click();
   await page.locator('#tank canvas').focus(); await page.locator('#tank canvas').press('ArrowRight');
   expect(await page.evaluate(() => window.__aquarium.audio.playing)).toBe(false);
-  for (const timbre of ['chip', 'pluck', 'sparkle']) {
+  for (const timbre of ['chip', 'pluck', 'sparkle', 'bubble', 'bell', 'bounce', 'marimba', 'echo']) {
     await page.locator('#sound-timbre').selectOption(timbre);
     const effects = await page.evaluate(() => window.__aquarium.audio.effectsPlayed);
     await page.locator('#tank canvas').focus(); await page.locator('#tank canvas').press('Enter');
@@ -684,4 +684,39 @@ test('narrow and landscape screens keep controls inside the viewport', async ({ 
   }
   await page.locator('#settings-toggle').click(); await expect(page.locator('#settings-panel')).not.toBeVisible();
   await page.locator('#settings-toggle').click(); await expect(page.locator('#settings-panel')).toBeVisible();
+});
+
+
+test('six new songs produce music, follow their key and persist without autoplay', async ({ page }) => {
+  await page.locator('#sound-toggle').click();
+  for (const [track, root] of [['picnic',79],['moonlight',69],['coral',76],['rain',81],['stars',72],['harbor',74]] as const) {
+    const before=await page.evaluate(()=>window.__aquarium.audio.musicNotes);
+    await page.locator('#sound-track').selectOption(track);
+    await expect.poll(()=>page.evaluate(()=>window.__aquarium.audio.musicNotes)).toBeGreaterThan(before);
+    await page.evaluate(()=>{window.__aquarium.sim.selected=1;});
+    const effects=await page.evaluate(()=>window.__aquarium.audio.effectsPlayed);
+    await page.locator('#tank canvas').focus(); await page.locator('#tank canvas').press('Enter');
+    await expect.poll(()=>page.evaluate(()=>window.__aquarium.audio.effectsPlayed)).toBe(effects+1);
+    expect(await page.evaluate(()=>window.__aquarium.audio.lastMidi)).toBe(root);
+  }
+  await page.locator('#sound-timbre').selectOption('echo'); await page.reload(); await page.waitForFunction(()=>window.__aquarium?.ready);
+  await expect(page.locator('#sound-track')).toHaveValue('harbor'); await expect(page.locator('#sound-timbre')).toHaveValue('echo');
+  expect(await page.evaluate(()=>window.__aquarium.audio.contextState)).toBe('not-created');
+});
+
+test('idle dashboard explains waiting and collects ready rewards once', async ({ page }, testInfo) => {
+  await page.locator('#idle-open').click();
+  await expect(page.locator('#idle-reward-total')).toHaveText('貝殻 0 個'); await expect(page.locator('#idle-claim-all')).toBeDisabled();
+  await expect(page.locator('#idle-next-growth')).toContainText('次の卵'); await expect(page.locator('#idle-goal-detail')).toContainText('図鑑');
+  await page.evaluate(()=>{const s=window.__aquarium.idle.state;s.shells=4;s.growth=1200;s.world.crab.pending=3;window.__aquarium.idle.revision++;});
+  await expect(page.locator('#idle-reward-total')).toHaveText('貝殻 13 個'); await expect(page.locator('#idle-open')).toContainText('貝殻13個');
+  const wallet=await page.evaluate(()=>window.__aquarium.game.state.shells);
+  await page.screenshot({path:testInfo.outputPath('idle-overview.png'),fullPage:true});
+  await page.locator('#idle-claim-all').click(); await expect(page.locator('#idle-claim-all')).toBeDisabled();
+  expect(await page.evaluate(()=>window.__aquarium.game.state.shells)).toBe(wallet+13);
+  await expect(page.locator('#ux-feedback')).toContainText('貝殻13個');
+  await page.locator('#idle-go-journal').click(); await expect(page.locator('[data-play-panel="journal"]')).toBeVisible();
+  await page.locator('[data-play-tab="idle"]').click(); await page.locator('#idle-go-shop').click(); await expect(page.locator('[data-play-panel="decor"]')).toBeVisible();
+  await page.reload(); await page.waitForFunction(()=>window.__aquarium?.ready); await page.locator('#idle-open').click();
+  await expect(page.locator('#idle-claim-all')).toBeDisabled(); expect(await page.evaluate(()=>window.__aquarium.game.state.shells)).toBe(wallet+13);
 });

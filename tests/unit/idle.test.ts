@@ -11,6 +11,18 @@ function setup() {
   return { idle, game };
 }
 describe('idle aquarium', () => {
+  it('collects every ready reward once, keeps unfinished journeys and persists the result', () => {
+    const { idle, game } = setup();
+    idle.state.shells=4; idle.state.growth=1200; idle.state.fairy=true; idle.state.level=3; idle.state.world.crab.pending=3;
+    idle.state.journey={ fishId:1, species:'goldfish', name:'ぽろん', route:0, elapsed:3599, recorded:false };
+    expect(idle.rewards.shells).toBe(19); expect(idle.claimAll(NOW)).toBe(19);
+    expect(game.state.shells).toBe(27); expect(game.state.owned).toContain('pink'); expect(idle.state.journey).not.toBeNull();
+    expect(idle.claimAll(NOW)).toBe(0); expect(game.state.shells).toBe(27);
+    idle.state.journey!.elapsed=3600; expect(idle.rewards.shells).toBe(12); expect(idle.claimAll(NOW)).toBe(12);
+    expect(game.state.shells).toBe(39); expect(idle.state.photos).toHaveLength(1); expect(idle.state.journey).toBeNull();
+    const restored=new IdleAquarium(JSON.parse(JSON.stringify(idle.state)), NOW);
+    restored.onGrant=grant=>game.receiveIdle(grant); expect(restored.claimAll(NOW)).toBe(0); expect(game.state.shells).toBe(39);
+  });
   it('validates saved clocks, collections, species and bounded progress', () => {
     const state = readIdleState({ version: 1, lastSeen: NOW + 999999, total: NaN, shells: 1e9, growth: Infinity, garden: 8, level: 9,
       eggs: [{ id: 1, species: 'bad', born: -100 }, { id: 1 }], young: [{ id: 2, born: Infinity }], nextEgg: -9,

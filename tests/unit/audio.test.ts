@@ -7,8 +7,8 @@ describe('original retro music and musical taps', () => {
     expect(readAudioSettings({ enabled: true, bgm: false, effects: 'yes', sync: false, track: '__proto__', timbre: 'invalid', volume: 20 })).toEqual({ ...AUDIO_DEFAULTS, enabled: true, bgm: false, sync: false, volume: 1 });
     expect(readAudioSettings({ volume: NaN, track: 'bubbles', timbre: 'sparkle' })).toMatchObject({ volume: .4, track: 'bubbles', timbre: 'sparkle' });
   });
-  it('has three distinct looping melodies and assigns fish harmonious, stable pitches', () => {
-    expect(new Set(Object.values(TRACKS).map(t => t.melody.join(','))).size).toBe(3);
+  it('has nine distinct looping melodies and assigns fish harmonious, stable pitches', () => {
+    expect(new Set(Object.values(TRACKS).map(t => t.melody.join(','))).size).toBe(9);
     for (const id of Object.keys(TRACKS) as TrackId[]) {
       const track = TRACKS[id];
       expect(track.melody).toHaveLength(64); expect(track.bass).toHaveLength(4); expect(track.chords).toHaveLength(4);

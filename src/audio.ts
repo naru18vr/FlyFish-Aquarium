@@ -12,8 +12,26 @@ export const TRACKS = {
     melody: [0,2,-1,4,2,-1,1,-1,0,1,2,-1,4,-1,2,-1, 4,5,-1,7,5,-1,4,-1,2,4,5,-1,4,-1,2,-1,
       5,7,-1,5,4,-1,2,-1,4,2,1,-1,2,-1,4,-1, 2,1,-1,0,1,-1,2,-1,1,2,1,-1,0,-1,-1,-1],
     bass: [0,7,9,5], chords: [[0,4,7],[7,11,14],[9,12,16],[5,9,12]], drum: true },
+  picnic: { name: 'おひるねピクニック', bpm: 94, root: 67, wave: 'triangle' as OscillatorType,
+    melody: [0,-1,-1,-1,2,-1,-1,-1,4,-1,4,-1,2,-1,-1,-1,1,-1,-1,-1,0,-1,-1,-1,2,-1,2,-1,4,-1,-1,-1,5,-1,-1,-1,4,-1,-1,-1,2,-1,2,-1,1,-1,-1,-1,2,-1,-1,-1,1,-1,-1,-1,0,-1,0,-1,0,-1,-1,-1],
+    bass: [0,9,5,7], chords: [[0,4,7],[9,12,16],[5,9,12],[7,11,14]], drum: false },
+  moonlight: { name: '月あかりの子守唄', bpm: 66, root: 57, wave: 'sine' as OscillatorType,
+    melody: [4,-1,-1,-1,2,-1,-1,-1,0,-1,0,-1,1,-1,-1,-1,2,-1,-1,-1,4,-1,-1,-1,5,-1,5,-1,4,-1,-1,-1,7,-1,-1,-1,5,-1,-1,-1,4,-1,4,-1,2,-1,-1,-1,1,-1,-1,-1,2,-1,-1,-1,1,-1,1,-1,0,-1,-1,-1],
+    bass: [0,5,9,7], chords: [[0,4,7],[5,9,12],[9,12,16],[7,11,14]], drum: false },
+  coral: { name: 'サンゴのダンス', bpm: 116, root: 64, wave: 'square' as OscillatorType,
+    melody: [0,2,-1,-1,1,-1,-1,2,2,-1,-1,-1,4,6,-1,-1,2,-1,-1,-1,5,-1,-1,6,4,6,-1,-1,2,-1,-1,-1,4,-1,-1,-1,7,9,-1,8,5,-1,-1,-1,4,-1,-1,-1,2,4,-1,-1,1,-1,-1,2,2,-1,-1,-1,0,2,-1,-1],
+    bass: [0,9,5,7], chords: [[0,4,7],[9,12,16],[5,9,12],[7,11,14]], drum: true },
+  rain: { name: '雨つぶのメロディ', bpm: 84, root: 69, wave: 'triangle' as OscillatorType,
+    melody: [2,-1,-1,-1,4,-1,-1,-1,5,-1,5,-1,4,-1,-1,-1,2,-1,-1,-1,1,-1,-1,-1,0,-1,0,-1,2,-1,-1,-1,4,-1,-1,-1,5,-1,-1,-1,7,-1,7,-1,5,-1,-1,-1,4,-1,-1,-1,2,-1,-1,-1,1,-1,1,-1,0,-1,-1,-1],
+    bass: [0,5,9,7], chords: [[0,4,7],[5,9,12],[9,12,16],[7,11,14]], drum: false },
+  stars: { name: '星くずパレード', bpm: 132, root: 60, wave: 'square' as OscillatorType,
+    melody: [5,7,-1,-1,4,-1,-1,5,2,-1,-1,-1,4,6,-1,-1,7,-1,-1,-1,5,-1,-1,6,4,6,-1,-1,2,-1,-1,-1,5,-1,-1,-1,7,9,-1,8,9,-1,-1,-1,7,-1,-1,-1,5,7,-1,-1,4,-1,-1,5,2,-1,-1,-1,0,2,-1,-1],
+    bass: [0,9,5,7], chords: [[0,4,7],[9,12,16],[5,9,12],[7,11,14]], drum: true },
+  harbor: { name: '夕暮れの港', bpm: 72, root: 62, wave: 'sine' as OscillatorType,
+    melody: [0,-1,-1,-1,1,-1,-1,-1,4,-1,4,-1,2,-1,-1,-1,5,-1,-1,-1,4,-1,-1,-1,2,-1,2,-1,1,-1,-1,-1,4,-1,-1,-1,2,-1,-1,-1,1,-1,1,-1,0,-1,-1,-1,2,-1,-1,-1,4,-1,-1,-1,1,-1,1,-1,0,-1,-1,-1],
+    bass: [0,5,9,7], chords: [[0,4,7],[5,9,12],[9,12,16],[7,11,14]], drum: false },
 };
-export const TIMBRES = { chip: 'ピコピコ', pluck: 'ぽろん', sparkle: 'きらきら' };
+export const TIMBRES = { chip: 'ピコピコ', pluck: 'ぽろん', sparkle: 'きらきら', bubble: 'ぷくぷく', bell: 'ちりん', bounce: 'ぴょこん', marimba: 'ころころ', echo: 'こだま' };
 export type TrackId = keyof typeof TRACKS;
 export type Timbre = keyof typeof TIMBRES;
 export interface AudioSettings { enabled: boolean; bgm: boolean; effects: boolean; sync: boolean; track: TrackId; timbre: Timbre; volume: number }
@@ -178,7 +196,16 @@ export class AquariumAudio {
     const midi = fishNote(this.settings.track, id), song = TRACKS[this.settings.track];
     const when = tapTime(now, this.origin, song.bpm, this.settings.sync && !!this.timer);
     const timbre = this.settings.timbre;
-    this.tone(midi, when, timbre === 'chip' ? .19 : .42, timbre === 'chip' ? 'square' : timbre === 'pluck' ? 'triangle' : 'sine', timbre === 'chip' ? .4 : .65, 'effect', pan);
+    const voices: Record<Timbre, [OscillatorType, number, number, number]> = {
+      chip: ['square', .19, .4, 0], pluck: ['triangle', .42, .65, 0], sparkle: ['sine', .42, .65, 0],
+      bubble: ['sine', .16, .7, 12], bell: ['sine', .65, .55, 0], bounce: ['square', .12, .32, -12],
+      marimba: ['triangle', .22, .75, 0], echo: ['triangle', .28, .5, 0],
+    };
+    const [wave, length, volume, slide] = voices[timbre];
+    this.tone(midi, when, length, wave, volume, 'effect', pan, slide);
+    if (timbre === 'bell') this.tone(midi + 19, when, .34, 'sine', .13, 'effect', -pan);
+    if (timbre === 'marimba') this.tone(midi + 12, when, .06, 'sine', .2, 'effect', pan);
+    if (timbre === 'echo') for (let i = 1; i <= 2; i++) this.tone(midi, when + i * .11, .2, 'triangle', .23 / i, 'effect', i % 2 ? -pan : pan);
     if (timbre === 'sparkle') this.tone(midi + 12, when + .025, .3, 'sine', .22, 'effect', -pan);
     this.effectsPlayed++; this.lastMidi = midi; this.lastDelay = when - now;
     return { midi, delay: when - now };

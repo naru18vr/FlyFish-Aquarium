@@ -138,6 +138,23 @@ export class IdleAquarium {
     advanceWorld(s.world, s.young, s.total, elapsed, now, s.epoch, this.context());
     this.changed(); this.flushGrants(); return elapsed;
   }
+  get rewards() {
+    const s = this.state;
+    const entries = [
+      { name: '貝殻ひろい', amount: s.shells },
+      { name: 'お花の収穫', amount: s.growth >= 1200 ? 6 : 0 },
+      { name: 'カニさんのお店', amount: s.world.crab.pending },
+      { name: '貝の妖精', amount: s.fairy ? 6 : 0 },
+      { name: '探検のお土産', amount: s.journey && s.journey.elapsed >= ROUTES[s.journey.route].seconds ? ROUTES[s.journey.route].shells : 0 },
+    ].filter(entry => entry.amount > 0);
+    return { entries, shells: entries.reduce((sum, entry) => sum + entry.amount, 0) };
+  }
+  claimAll(now = Date.now()) {
+    const rewards = this.rewards;
+    if (!rewards.shells) return 0;
+    this.collectShells(); this.harvest(now); this.collectCrab(); this.greetFairy(now); this.receiveJourney(now);
+    return rewards.shells;
+  }
   collectShells() { const amount = this.state.shells; if (!amount) return false; this.state.shells = 0; this.grant(amount); return true; }
   harvest(now = Date.now()) {
     if (this.state.growth < 1200) return false;

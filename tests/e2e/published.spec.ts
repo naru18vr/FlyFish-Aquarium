@@ -149,12 +149,34 @@ test('published retro music and fish effects produce recorded audio and can be m
   await page.waitForTimeout(450);
   const effectPeak = await capturedPeak(page); expect(effectPeak).toBeGreaterThan(.002); expect(effectPeak).toBeLessThan(.5);
   await page.locator('#tank-pause').click(); await page.locator('#tank-exit').click();
-  await page.locator('#sound-track').selectOption('bubbles'); await page.locator('#sound-timbre').selectOption('pluck');
+  await page.locator('#sound-track').selectOption('moonlight'); await page.locator('#sound-timbre').selectOption('bell');
   await expect.poll(() => page.evaluate(() => window.__aquarium.audio.playing)).toBe(true);
   await startCapture(page); await page.waitForTimeout(1800);
   const musicPeak = await capturedPeak(page); expect(musicPeak).toBeGreaterThan(.001); expect(musicPeak).toBeLessThan(.5);
+  await expect(page.locator('#sound-track option')).toHaveCount(9); await expect(page.locator('#sound-timbre option')).toHaveCount(8);
+  await page.locator('#pause').click(); await startCapture(page);
+  const effects = await page.evaluate(()=>window.__aquarium.audio.effectsPlayed);
+  await page.locator('#tank canvas').focus(); await page.locator('#tank canvas').press('Enter');
+  await expect.poll(()=>page.evaluate(()=>window.__aquarium.audio.effectsPlayed)).toBe(effects+1);
+  await page.waitForTimeout(700); const bellPeak=await capturedPeak(page); expect(bellPeak).toBeGreaterThan(.002); expect(bellPeak).toBeLessThan(.5);
   await page.screenshot({ path: testInfo.outputPath('published-sound-controls.png'), fullPage: true });
   await page.locator('#sound-toggle').click(); await expect.poll(() => page.evaluate(() => window.__aquarium.audio.contextState)).toBe('suspended');
   console.log(`Recorded audio peaks: effect=${effectPeak.toFixed(4)}, music=${musicPeak.toFixed(4)}`);
   expect(errors).toEqual([]);
+});
+
+
+test('published idle dashboard receives offline rewards together and shows the next goal', async ({ page }, testInfo) => {
+  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+  await page.goto('./?tank&debug'); await page.waitForFunction(()=>window.__aquarium?.ready);
+  await page.evaluate(()=>{const s=window.__aquarium.idle.state;s.lastSeen=Date.now()-3600000;localStorage.setItem('flyfish-idle-v1',JSON.stringify(s));});
+  await page.reload(); await page.waitForFunction(()=>window.__aquarium?.ready); await page.locator('#tank-pause').click(); await page.locator('#idle-open').click();
+  const amount=await page.evaluate(()=>window.__aquarium.idle.rewards.shells),wallet=await page.evaluate(()=>window.__aquarium.game.state.shells);
+  expect(amount).toBeGreaterThanOrEqual(18); await expect(page.locator('#idle-reward-total')).toHaveText('貝殻 '+amount+' 個');
+  await expect(page.locator('#idle-goal-detail')).toContainText('図鑑');
+  await page.screenshot({path:testInfo.outputPath('published-idle-overview.png'),fullPage:true});
+  await page.locator('#idle-claim-all').click(); await expect(page.locator('#idle-claim-all')).toBeDisabled();
+  expect(await page.evaluate(()=>window.__aquarium.game.state.shells)).toBe(wallet+amount);
+  await page.reload(); await page.waitForFunction(()=>window.__aquarium?.ready); await page.locator('#idle-open').click();
+  await expect(page.locator('#idle-claim-all')).toBeDisabled(); expect(await page.evaluate(()=>window.__aquarium.game.state.shells)).toBe(wallet+amount); expect(errors).toEqual([]);
 });

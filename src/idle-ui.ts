@@ -22,8 +22,14 @@ export class IdleUI {
     document.querySelector('.play-tabs')!.insertAdjacentHTML('beforeend', '<button data-play-tab="idle" aria-pressed="false">おるすばん</button>');
     document.querySelector('.play-menu')!.insertAdjacentHTML('beforeend', '<button data-play-route="idle"><span aria-hidden="true">⌂</span><strong>おるすばんの水槽</strong><small>貝殻・お花・探検・卵・留守中の日記</small><b aria-hidden="true">→</b></button>');
     document.querySelector('#play-message')!.insertAdjacentHTML('beforebegin', `<section data-play-panel="idle" hidden>
-      <h3>離れている間も、小さな世界は育ちます。</h3><p>遊んでいる間も、閉じている間も育ちます。閉じている間の進行は1回最大8時間。魚が死んだり、取り逃して損をしたりすることはありません。</p>
-      <div id="idle-welcome" class="play-help" hidden><strong>おかえりなさい！</strong><p id="idle-welcome-text"></p><button id="idle-dismiss">おかえりの案内を閉じる</button></div>
+      <h3>待つ → 受け取る → 水槽を育てる</h3><p>遊んでいる間も、閉じている間も育ちます。閉じている間の進行は1回最大8時間。魚が死んだり、取り逃して損をしたりすることはありません。</p>
+      <section id="idle-overview" class="idle-overview" aria-label="放置の成果と次の目標">
+        <div class="idle-reward-heading"><div><span>いま受け取れる成果</span><strong id="idle-reward-total"></strong></div><button id="idle-claim-all">成果をまとめて受け取る</button></div>
+        <p id="idle-reward-detail"></p>
+        <div class="idle-summary-grid"><article><h4>🥚 次に育つもの</h4><strong id="idle-next-growth"></strong><p id="idle-next-flower"></p></article><article><h4>🏡 次の目標</h4><strong id="idle-goal"></strong><p id="idle-goal-detail"></p></article></div>
+        <p id="idle-next-action" role="status"></p><div class="idle-actions"><button id="idle-go-journal">図鑑のヒントを見る →</button><button id="idle-go-shop">貝殻で模様替え →</button></div>
+        <p class="play-footnote">受け取った貝殻は右上のお財布へ。飾りを集めて、魚の成長や新しい水槽を楽しもう。受け取り待ちでも育成は続きます。</p>
+      </section><div id="idle-welcome" class="play-help" hidden><strong>おかえりなさい！</strong><p id="idle-welcome-text"></p><button id="idle-dismiss">おかえりの案内を閉じる</button></div>
       <div class="idle-sections">
         <article><h4>🐚 貝殻ひろい</h4><p>5分に1個。200個まで貯まります。</p><strong id="idle-shell-count"></strong><button id="idle-shell-collect">まとめて受け取る</button></article>
         <article><h4>🌱 海藻ガーデン</h4><label for="idle-garden-kind">育てる海藻</label><select id="idle-garden-kind"></select><progress id="idle-garden-progress" max="1200" value="0" aria-label="海藻の成長"></progress><p id="idle-garden-status"></p><button id="idle-harvest">お花を収穫する</button><p class="play-footnote">20分で開花。収穫で貝殻＋6、初回は桃色の海藻、3回目はすみれ色の岩が使えるようになります。</p></article>
@@ -41,6 +47,8 @@ export class IdleUI {
       ['idle-shell-collect', () => { const n=idle.state.shells; if(idle.collectShells())book.message(`貝殻${n}個を受け取りました。右上の持っている貝殻に加わりました。`); }], ['idle-harvest', () => idle.harvest()],
       ['idle-trip-receive', () => idle.receiveJourney()], ['idle-fairy', () => idle.greetFairy()],
       ['idle-dismiss', () => idle.dismissWelcome()],
+      ['idle-claim-all', () => { const n=idle.claimAll(); if(n)book.message(`貝殻${n}個をまとめて受け取りました。収穫した海藻はまた育ち始めます。`); }],
+      ['idle-go-journal', () => book.open('journal')], ['idle-go-shop', () => book.open('decor')],
     ] as const) document.querySelector<HTMLButtonElement>(`#${id}`)!.onclick = () => { action(); this.refresh(true); };
     document.querySelector<HTMLInputElement>('#idle-auto-feed')!.onchange = () => { idle.toggleFeed(); this.refresh(true); };
     document.querySelector<HTMLSelectElement>('#idle-garden-kind')!.onchange = event => { idle.garden(+(event.target as HTMLSelectElement).value); this.refresh(true); };
@@ -58,12 +66,24 @@ export class IdleUI {
   refresh(force = false) {
     const s = this.idle.state;
     const quick = document.querySelector<HTMLButtonElement>('#idle-open')!;
-    quick.hidden = !!this.game.phrase; quick.textContent = `おるすばん${s.shells || s.growth >= 1200 || s.fairy ? ' · 成果あり' : ''} →`;
+    quick.hidden = !!this.game.phrase; quick.textContent = `おるすばん${this.idle.rewards.shells ? ' · 貝殻' + this.idle.rewards.shells + '個' : ' · 育成中'} →`;
     document.querySelector<HTMLButtonElement>('#idle-fairy-visit')!.hidden = !s.fairy || !!this.game.phrase;
     if (!force && (this.root.hidden || this.seen === this.idle.revision)) return;
     this.seen = this.idle.revision;
     const set = (id: string, value: string) => document.querySelector(`#${id}`)!.textContent = value;
     const button = (id: string, disabled: boolean) => document.querySelector<HTMLButtonElement>(`#${id}`)!.disabled = disabled;
+    const rewards = this.idle.rewards;
+    set('idle-reward-total', `貝殻 ${rewards.shells} 個`);
+    set('idle-reward-detail', rewards.entries.length ? rewards.entries.map(e => `${e.name} ＋${e.amount}`).join(' ・ ') : '成果は自動で貯まります。最初の貝殻は5分、お花は20分で受け取れます。');
+    button('idle-claim-all', rewards.shells === 0);
+    document.querySelector('#idle-claim-all')!.textContent = rewards.shells ? `貝殻${rewards.shells}個をまとめて受け取る` : '成果が貯まるのを待っています';
+    const egg = s.eggs.reduce<number | null>((soonest, e) => Math.min(soonest ?? Infinity, Math.max(0, 1800 - (s.total - e.born))), null);
+    set('idle-next-growth', egg !== null ? `卵が孵るまで ${duration(egg)}` : s.young.length + s.eggs.length >= 12 ? '育成枠がいっぱい（12匹）' : `次の卵 ${duration(s.nextEgg - s.total)}`);
+    set('idle-next-flower', s.growth >= 1200 ? 'お花も収穫できます！' : `お花の開花 ${duration(1200 - s.growth)} · 育てた魚${s.young.length}匹`);
+    const goalTime = [0,600,3600,14400][s.level] ?? 14400, goalDiscoveries = [0,5,7,10][s.level] ?? 10;
+    set('idle-goal', s.level === 4 ? 'Lv.4 · 成長特典をすべて解放！' : `水槽 Lv.${s.level} → Lv.${s.level + 1}`);
+    set('idle-goal-detail', s.level === 4 ? '色違い・探検地図・お気に入りの水槽を集めよう。' : `${s.total >= goalTime ? '時間 ✓' : '育成時間 ' + duration(goalTime - s.total)} ／ 図鑑 ${Math.min(s.discoveries,goalDiscoveries)}/${goalDiscoveries}${s.discoveries >= goalDiscoveries ? ' ✓' : '（あと' + (goalDiscoveries-s.discoveries) + '項目）'}。両方そろうと成長します。`);
+    set('idle-next-action', rewards.shells ? '今できること：成果を受け取って、模様替えを楽しもう。' : s.level < 4 && s.discoveries < goalDiscoveries ? '今できること：図鑑のヒントを見て、魚と遊んでみよう。待ち時間も育成が進みます。' : '今できること：魚を眺めたり、音で遊んだりして待とう。閉じても最大8時間ぶん進みます。');
     document.querySelector<HTMLElement>('#idle-welcome')!.hidden = !s.welcome;
     if (s.welcome) set('idle-welcome-text', `${Math.max(1, Math.floor(s.welcome.seconds / 60))}分ぶんの思い出。貝殻＋${s.welcome.shells}、生まれた稚魚${s.welcome.hatched}匹。成果を下のボタンから受け取ろう。`);
     set('idle-shell-count', `${s.shells} / 200 個`); document.querySelector('#idle-shell-collect')!.textContent=s.shells?`貝殻${s.shells}個を受け取る`:'貝殻は5分ごとに貯まります'; button('idle-shell-collect', s.shells === 0);
